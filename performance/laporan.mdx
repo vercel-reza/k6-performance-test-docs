@@ -1,0 +1,104 @@
+---
+title: "Laporan performance"
+description: "Format HTML/JSON aggregate dari handleSummary, status threshold, dan cara mengarsipkan bukti."
+icon: "chart-column"
+---
+
+## Sumber report
+
+`handleSummary` pada setiap script k6 memanggil `performance/lib/summary.js`, yang
+menghasilkan tiga output dari data summary k6:
+
+| Output | Isi |
+| --- | --- |
+| `reports/<prefix>-summary.html` | HTML mandiri tanpa CDN, bisa dibuka offline. |
+| `reports/<prefix>-summary.json` | Aggregate machine-readable. |
+| stdout | Ringkasan metrik. |
+
+Prefix: `auth`, `booking`, `load`, `ten`. Nama ini **tertimpa** pada run berikutnya.
+
+## Struktur JSON
+
+```json
+{
+  "label": "auth smoke",
+  "timestamp": "2026-10-29T06:36:58.000Z",
+  "duration_ms": 1204,
+  "metrics": {
+    "checks": {
+      "type": "rate",
+      "contains": "default",
+      "values": { "rate": 1, "passes": 2, "fails": 0 },
+      "thresholds": { "rate==1": { "ok": true } }
+    }
+  }
+}
+```
+
+- Metrik diurutkan berdasarkan nama.
+- Hanya field aggregate (`type`, `contains`, `values`, `thresholds`) yang dipilih.
+- Tidak ada body, header, credential, atau token.
+- Ini **bukan** raw sample series; urutan request dan distribusi mentah tidak dapat
+  direkonstruksi dari file ini.
+
+## Status report
+
+| Status | Kapan |
+| --- | --- |
+| `PASSED` | Threshold `checks.rate==1` sudah dievaluasi dan tidak ada threshold gagal. |
+| `FAILED` | Ada threshold yang gagal. |
+| `NOT EVALUATED` | Hasil threshold belum ada (mis. run gagal sebelum evaluasi). |
+
+`NOT EVALUATED` **bukan** lulus. Keberadaan HTML juga bukan bukti lulus — periksa exit
+code proses k6.
+
+## Artefak dan provenance
+
+Arsipkan bersama:
+
+- file HTML dan JSON,
+- console (`reports/<prefix>-console.txt`),
+- exit code,
+- versi tool dan commit,
+- waktu UTC,
+- konfigurasi nonsecret (target, VU, durasi).
+
+Nama file default akan tertimpa, jadi salin ke arsip bertimestamp sebelum run ulang.
+
+## Sample per request
+
+Report aggregate tidak memuat titik request. Untuk itu gunakan jalur sample:
+
+```bash
+bash scripts/run-ten-requests.sh
+python3 scripts/publish-samples.py reports/ten-summary.json reports/ten-samples.jsonl
+```
+
+Sample hanya menyimpan `Point/http_req_duration` dengan `ordinal`, `recorded_at`,
+`duration_ms`, `status`, `method`, `endpoint`. URL, query, tag mentah, dan body tidak
+disimpan. Detail: [Sepuluh request](/performance/sepuluh-request).
+
+## Publish aggregate
+
+```bash
+python3 scripts/publish-report.py reports/auth-summary.json
+```
+
+- ID = UUID v5 deterministik dari hash byte report.
+- Byte identik → row tidak bertambah (idempoten), meski nama file berubah.
+- Report dengan threshold gagal tetap boleh disimpan; report tanpa threshold ditolak.
+- Publikasi gagal tidak berarti test gagal — diagnosis koneksi/schema/env secara terpisah.
+
+Detail: [Publishing](/observability/publishing).
+
+## Contoh hasil aktual
+
+Dari `reports/RUN.md` (2026-10-29 UTC, Restful-Booker):
+
+| Pengujian | Requests | Checks | HTTP failed | Avg duration |
+| --- | ---: | --- | ---: | ---: |
+| Auth smoke | 1 | 2/2 (100%) | 0% | 469.61 ms |
+| Auth → booking | 2 | 4/4 (100%) | 0% | 755.19 ms |
+
+Keduanya exit code 0 dan threshold `checks: rate==1` lulus. Ini smoke, **bukan** bukti
+kapasitas atau SLA. Hasil berikutnya dapat berbeda karena jaringan dan kondisi server.

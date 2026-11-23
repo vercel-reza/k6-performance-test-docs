@@ -1,0 +1,76 @@
+---
+title: "Referensi environment"
+description: "Semua variabel environment yang dibaca Go, k6, engine profil, publisher, dan provisioning."
+icon: "list"
+---
+
+## Go (Restful-Booker)
+
+| Variabel | Default | Dibaca oleh |
+| --- | --- | --- |
+| `BASE_URL` | `https://restful-booker.herokuapp.com` | `config.BaseURL()` |
+| `BOOKER_USERNAME` | `admin` | `config.Credentials()` |
+| `BOOKER_PASSWORD` | `password123` | `config.Credentials()` |
+| `RUN_API_TESTS` | tidak diset | `api_test.go` (hanya `1`) |
+| `FUNCTIONAL_REPORT` | tidak diset | `api_test.go` (menulis Cucumber JSON + `.meta.json`) |
+
+## k6 (Booker)
+
+| Variabel | Default | Catatan |
+| --- | --- | --- |
+| `BASE_URL` | URL demo | Wajib valid, tanpa credential/query/fragment. |
+| `BOOKER_USERNAME` | `admin` | Kredensial demo. |
+| `BOOKER_PASSWORD` | `password123` | Kredensial demo. |
+| `ALLOW_LOAD_TEST` | tidak diset | Hanya `true` membuka load. |
+| `LOAD_VUS` | `5` | Integer 1–10. |
+| `LOAD_DURATION_SECONDS` | `30` | Integer 1–300. |
+| `LOAD_SLEEP_SECONDS` | `1` | Angka 1–60. |
+
+## Engine profil universal
+
+| Variabel | Wajib | Arti |
+| --- | --- | --- |
+| `PERF_ALLOWED_ORIGINS` | Ya (atau `--allow-origin`) | JSON array origin yang disetujui. |
+| `PERF_PROFILE` | Ya | Path absolut profil; diisi wrapper. |
+| `PERF_RUN_ID` | Ya | 32-hex; diisi wrapper. |
+| `PERF_ALLOW_HTTP` | Tidak | Hanya `true` mengizinkan HTTP non-loopback. |
+| `ALLOW_LOAD_TEST` | Untuk mode load | Sama seperti k6 Booker. |
+| `WEB_A_ORIGIN`, `WEB_B_ORIGIN` | Untuk contoh | Origin target. |
+| `WEB_USERNAME`, `WEB_PASSWORD` | Untuk contoh login | Credential dari secret store. |
+
+<Warning>
+Wrapper menolak variabel `K6_*` selain `K6_NO_USAGE_REPORT` (yang dipaksa `true`) agar
+tidak ada override tersembunyi yang melonggarkan batas beban.
+</Warning>
+
+## Publisher (libpq)
+
+| Variabel | Default |
+| --- | --- |
+| `PGHOST` | `localhost` |
+| `PGPORT` | `5432` |
+| `PGDATABASE` | `k6-performance-test` |
+| `PGUSER` | `k6_report_writer` |
+| `PGPASSWORD` | dari secret store |
+| `PGPASSFILE` | alternatif `.pgpass` |
+
+## Provisioning Grafana
+
+| Variabel | Default | Catatan |
+| --- | --- | --- |
+| `GRAFANA_URL` | `http://katalon-home.orb.local:3005` | Gunakan HTTPS untuk remote. |
+| `GRAFANA_USER` | `admin` | Akun existing. |
+| `GRAFANA_PASSWORD` | ditanyakan interaktif | Jangan tulis di script/history. |
+
+## Uji database opsional
+
+| Variabel | Efek |
+| --- | --- |
+| `RUN_DB_TESTS=1` | Mengaktifkan `scripts/test-universal-db.py` pada database lokal disposable. |
+
+## Aturan umum
+
+- Tidak ada pemuatan `.env` otomatis.
+- Nilai secret tidak boleh masuk repo, report, screenshot, atau command history.
+- Precedence Postman: `environment` > `collection` > `global`.
+- Metadata provenance report tidak dapat dioverride lewat environment/CLI.

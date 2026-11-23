@@ -1,0 +1,86 @@
+---
+title: "Referensi CLI"
+description: "Daftar target Make, script runner, publisher, dan validator beserta exit code-nya."
+icon: "terminal"
+---
+
+## Make
+
+| Target | Perintah inti |
+| --- | --- |
+| `make test` | `CGO_ENABLED=0 go test -count=1 ./...` |
+| `make vet` | `go vet ./...` |
+| `make race` | `CGO_ENABLED=1 go test -race ./...` |
+| `make integration` | `RUN_API_TESTS=1 go test -count=1 -v ./...` |
+| `make verify` | test + vet + validator JSON + unit test Node/Python |
+| `make verify-profiles` | `verify` + uji k6 dua fixture loopback |
+| `make verify-db` | `RUN_DB_TESTS=1 python3 scripts/test-universal-db.py` |
+| `make smoke` | `bash scripts/run-performance.sh auth` |
+| `make booking` | `bash scripts/run-performance.sh booking` |
+| `make load` | `bash scripts/run-performance.sh load` |
+| `make ten` | `bash scripts/run-ten-requests.sh` |
+| `make functional` | `bash scripts/run-functional.sh` |
+| `make publish` | publish `auth-summary.json` + `booking-summary.json` |
+| `make publish-functional` | publish `functional-summary.json` |
+| `make publish-ten` | publish `ten-summary.json` + `ten-samples.jsonl` |
+| `make observability` | `python3 scripts/setup-observability.py` |
+| `make workspace` | `python3 scripts/check-workspace.py` |
+
+<Warning>
+`make integration`, `make smoke`, `make booking`, `make ten`, dan `make publish*`
+menghubungi layanan eksternal. `make load` membutuhkan izin eksplisit.
+</Warning>
+
+## Runner
+
+```bash
+bash scripts/run-performance.sh [auth|booking|load]
+bash scripts/run-functional.sh
+bash scripts/run-ten-requests.sh
+python3 scripts/run-profile.py PROFILE.json [--allow-origin ORIGIN]... [--output-dir DIR]
+```
+
+- `run-performance.sh`: pindah ke root, `mkdir -p reports`, `k6 run | tee`, `pipefail`.
+- `run-functional.sh`: `umask 077`, hapus artefak lama, set `FUNCTIONAL_REPORT`, jalankan
+  `CGO_ENABLED=0 go test -count=1 -v ./...`.
+- `run-ten-requests.sh`: menolak argumen, hapus output lama, tulis JSONL sample.
+- `run-profile.py`: tanpa shell, membuat direktori run baru, menolak `K6_*` tersembunyi.
+
+Exit code:
+
+| Kode | Arti |
+| --- | --- |
+| `0` | Sukses (threshold k6 lulus / test Go lulus). |
+| non-zero | Test atau threshold gagal; exit diteruskan. |
+| `2` | Argumen/validasi/prasyarat runner gagal (mis. k6 tidak ada, origin tidak disetujui). |
+
+## Publisher
+
+```bash
+python3 scripts/publish-report.py REPORT.json
+python3 scripts/publish-functional.py REPORT.json
+python3 scripts/publish-samples.py SUMMARY.json SAMPLES.jsonl [--profile PROFILE.json]
+```
+
+## Validator dan unit test
+
+| Perintah | Cakupan |
+| --- | --- |
+| `python3 scripts/validate-json.py` | Sintaks semua JSON (bukan schema/semantik). |
+| `node scripts/test-summary.mjs` | Escaping, status threshold, serialisasi aggregate. |
+| `node scripts/test-profile.mjs` | Kontrak profil, interpolasi, JSON Pointer, isolasi secret. |
+| `python3 scripts/test-profile-k6.py` | Integrasi k6 dengan fixture loopback (butuh k6). |
+| `python3 scripts/test-publish-report.py` | Parser publisher dan escaping SQL. |
+| `python3 scripts/test-publish-functional.py` | Fixture Cucumber, mapping, transaksi. |
+| `python3 scripts/test-publish-samples.py` | Parser sample, batas, atomisitas. |
+| `python3 scripts/test-report-profiles.py` | Metadata project/profile pada report. |
+| `python3 scripts/test-dashboard.py` | Layout, link, query sumber, status color. |
+| `python3 scripts/check-workspace.py` | Struktur repo, skill, dashboard, aturan ignore secret. |
+| `python3 -m unittest discover -s gostman -p 'test_*.py' -v` | Importer/properti koleksi Gostman. |
+
+## CI
+
+`.github/workflows/test.yml` menjalankan verifikasi offline pada push/PR: checkout, Go dari
+`go.mod`, Node 22, `go test -race`, `go vet`, validator JSON, dan unit test Python/Node.
+
+Tidak ada smoke/load publik maupun publikasi database otomatis di CI.

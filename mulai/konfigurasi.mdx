@@ -1,0 +1,78 @@
+---
+title: "Konfigurasi"
+description: "Cara proyek membaca environment, nilai default, dan contoh untuk Bash maupun PowerShell."
+icon: "gear"
+---
+
+## Tidak ada dotenv otomatis
+
+Go, k6, dan wrapper Python **tidak** memuat `.env` secara implisit. `.env.example`
+hanya referensi; export nilai yang sudah ditinjau secara sadar.
+
+```bash
+# Bash
+export BASE_URL=https://restful-booker.herokuapp.com
+export BOOKER_USERNAME=admin
+export BOOKER_PASSWORD=password123
+```
+
+```powershell
+# PowerShell
+$env:BASE_URL = 'https://restful-booker.herokuapp.com'
+$env:BOOKER_USERNAME = 'admin'
+$env:BOOKER_PASSWORD = 'password123'
+Remove-Item Env:BOOKER_PASSWORD
+```
+
+## Variabel inti
+
+| Variabel | Default | Perilaku |
+| --- | --- | --- |
+| `BASE_URL` | `https://restful-booker.herokuapp.com` | Slash akhir dipangkas. Go default test tetap memakai server lokal. |
+| `BOOKER_USERNAME` | `admin` | Fallback jika kosong. Khusus demo. |
+| `BOOKER_PASSWORD` | `password123` | Fallback jika kosong. Khusus demo. |
+| `RUN_API_TESTS` | tidak diset | Hanya string `1` yang mengaktifkan integrasi Go. |
+| `ALLOW_LOAD_TEST` | tidak diset | Hanya `true` yang membuka mode load k6. |
+| `LOAD_VUS` | `5` | Integer 1–10. |
+| `LOAD_DURATION_SECONDS` | `30` | Integer 1–300. |
+| `LOAD_SLEEP_SECONDS` | `1` | Angka 1–60; desimal diperbolehkan. |
+
+## Variabel engine profil universal
+
+| Variabel | Arti |
+| --- | --- |
+| `PERF_ALLOWED_ORIGINS` | JSON array origin yang disetujui (bukan string dipisah koma). |
+| `PERF_ALLOW_HTTP` | Hanya `true` mengizinkan HTTP non-loopback. |
+| `PERF_PROFILE` | Path absolut profil; diisi wrapper, jangan diatur manual. |
+| `PERF_RUN_ID` | 32-hex baru per run; diisi wrapper. |
+| `WEB_A_ORIGIN`, `WEB_B_ORIGIN` | Origin target contoh `multi-*`. |
+| `WEB_USERNAME`, `WEB_PASSWORD` | Input login contoh multi-target. |
+
+<Warning>
+Wrapper `run-profile.py` **menolak** environment `K6_*` selain `K6_NO_USAGE_REPORT`,
+agar tidak ada override tersembunyi yang melonggarkan batas beban.
+</Warning>
+
+## Variabel koneksi database
+
+Publisher memakai libpq, bukan password di argumen CLI:
+
+| Variabel | Default / catatan |
+| --- | --- |
+| `PGHOST` | `localhost` |
+| `PGPORT` | `5432` |
+| `PGDATABASE` | `k6-performance-test` |
+| `PGUSER` | `k6_report_writer` |
+| `PGPASSWORD` / `PGPASSFILE` | Dari secret store / `.pgpass` |
+
+`.env.observability` dibuat provisioning dengan mode `0600` dan diabaikan Git. Jangan
+mencetak, menyalin, atau meng-commit isinya.
+
+## Precedence yang perlu diingat
+
+1. Nilai environment yang diexport eksplisit menang atas default kode.
+2. Postman: `environment` > `collection variables` > `global`.
+3. Provenance laporan **tidak** bisa dioverride lewat CLI — metadata berasal dari
+   artefak yang dihasilkan runner.
+
+Daftar lengkap termasuk variabel profiling: [Referensi environment](/referensi/environment).

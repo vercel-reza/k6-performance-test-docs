@@ -1,0 +1,118 @@
+---
+title: "Setup observability"
+description: "Provision database, role, datasource, folder, dan dashboard pada layanan PostgreSQL/Grafana yang sudah ada."
+icon: "database"
+---
+
+## Prasyarat
+
+<Warning>
+Setup **mengubah state**: membuat database/role lokal, lalu membuat datasource dan
+dashboard di Grafana. Jalankan hanya dengan persetujuan dan pada instance yang benar.
+Script tidak menginstal PostgreSQL/Grafana dan tidak mereset akun admin.
+</Warning>
+
+- PostgreSQL yang sudah berjalan (default `localhost:5432`), akses `sudo -n -u postgres`.
+- Grafana yang sudah berjalan, akun admin existing.
+- Python 3.11+ dan `psql`.
+- `GRAFANA_URL` (default `http://katalon-home.orb.local:3005`), `GRAFANA_USER` (default `admin`).
+
+## Menjalankan
+
+```bash
+python3 scripts/setup-observability.py
+# atau
+make observability
+```
+
+Password admin Grafana diminta **interaktif** (tidak masuk shell history). Alternatif injeksi:
+`GRAFANA_PASSWORD` lewat secret environment.
+
+Langkah yang dilakukan:
+
+1. Autentikasi ke Grafana lebih dulu.
+2. Buat database `k6-performance-test` bila belum ada.
+3. Terapkan `observability/schema.sql`.
+4. Buat/rotasi role `k6_report_writer` dan `k6_report_reader`.
+5. Cabut akses `PUBLIC`; beri grant minimum.
+6. Tulis `.env.observability` mode `0600` (diabaikan Git).
+7. Buat/update datasource `k6-performance-test` dengan password reader di `secureJsonData`.
+8. Buat folder `k6-performance-test` dan import dashboard (`overwrite` hanya UID proyek).
+9. Cek health datasource.
+
+## Hak akses
+
+| Role | Hak |
+| --- | --- |
+| `k6_report_writer` | CONNECT, USAGE, INSERT, SELECT — tanpa UPDATE/DELETE/DDL |
+| `k6_report_reader` | CONNECT, USAGE, SELECT — dipakai datasource Grafana |
+
+Role bukan akun migrasi. Perubahan DDL tetap dilakukan administrator.
+
+## Secret lokal
+
+`.env.observability` berisi password role dan reader:
+
+```text
+PGHOST=localhost
+PGPORT=5432
+PGDATABASE=k6-performance-test
+PGUSER=k6_report_writer
+PGPASSWORD=…
+GRAFANA_PG_PASSWORD=…
+```
+
+Mode `0600`, diabaikan Git. Jangan membaca, mencetak, atau meng-commit isinya. Jangan
+`source` file shell yang belum ditinjau.
+
+## Database yang sudah ada (migrasi)
+
+Jika database sudah diprovision versi lama, terapkan migrasi aditif lebih dulu:
+
+```bash
+psql -X -v ON_ERROR_STOP=1 -h localhost -p 5432 -U postgres \
+  -d 'k6-performance-test' -f observability/schema.sql
+```
+
+Kemungkinan besar Anda juga perlu grant untuk tabel baru:
+
+```sql
+GRANT INSERT, SELECT ON public.performance_runs, public.performance_samples,
+  public.functional_runs, public.functional_steps TO k6_report_writer;
+GRANT SELECT ON public.performance_runs, public.performance_samples,
+  public.functional_runs, public.functional_steps TO k6_report_reader;
+```
+
+<Info>
+Nama database mengandung tanda minus. Dalam SQL gunakan identifier ber-quote
+(`"k6-performance-test"`); di CLI `psql -d k6-performance-test`.
+</Info>
+
+## Backup sebelum perubahan
+
+```bash
+umask 077
+pg_dump -h localhost -p 5432 -U postgres -d 'k6-performance-test' \
+  -Fc -f /lokasi-aman/k6-performance-test-before-migration.dump
+```
+
+Uji restore pada database terpisah. Jangan menjalankan restore destruktif pada DB aktif.
+
+## Sifat idempotent dan batasnya
+
+- `CREATE TABLE IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`, dan `CREATE INDEX IF NOT EXISTS`.
+- Setup ulang mengembalikan definisi dashboard ke `observability/dashboard.json`.
+- Bukan migration engine: perubahan kolom/tipe yang merusak memerlukan migrasi eksplisit
+  dan penyesuaian parser/dashboard.
+- Datasource lokal memakai `sslmode disable` — hanya untuk loopback.
+
+## Deployment remote
+
+Untuk Grafana/PostgreSQL remote:
+
+- Gunakan HTTPS dan `sslmode=verify-full`.
+- Batasi firewall; jangan ekspos port publik tanpa TLS dan kontrol akses.
+- Simpan credential di secret manager, bukan file repo.
+- Ingat `localhost` pada datasource dievaluasi oleh **server Grafana**, bukan browser.
+
+Lanjut: [Skema PostgreSQL](/observability/skema-postgres) dan [Dashboard](/observability/dashboard).

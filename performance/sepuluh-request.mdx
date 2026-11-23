@@ -1,0 +1,89 @@
+---
+title: "Sepuluh request"
+description: "Observasi 10 request sekuensial beserta sample JSONL dan grafik per request di Grafana."
+icon: "list-ol"
+---
+
+<Warning>
+Dapatkan izin target terlebih dahulu. Ini observasi kecil, **bukan** uji kapasitas atau SLA.
+</Warning>
+
+## Menjalankan
+
+```bash
+# Export BASE_URL / BOOKER_USERNAME / BOOKER_PASSWORD yang sudah ditinjau
+bash scripts/run-ten-requests.sh
+
+# Publikasi terpisah (PG* environment / .pgpass)
+python3 scripts/publish-samples.py reports/ten-summary.json reports/ten-samples.jsonl
+```
+
+Runner memakai **1 VU, 10 iterasi**, satu `POST /auth` per iterasi, dan `sleep(1)` setelah
+setiap request. Redirect dinonaktifkan oleh helper bersama. Failed check menggagalkan exit
+k6 melalui `pipefail`. Runner menghapus output lama sebelum eksekusi dan memakai `umask 077`.
+
+Tidak ada body, token, atau credential yang dicatat. System tag k6 dibatasi ke
+`name`, `method`, `status` (URL tidak disertakan).
+
+## Artefak
+
+- `reports/ten-summary.html` dan `.json` — aggregate summary.
+- `reports/ten-samples.jsonl` — stream metrik JSON k6, bukan dump response.
+- `reports/ten-console.txt` — console/aggregate.
+
+## Kontrak publisher sample
+
+`publish-samples.py SUMMARY SAMPLES [--profile PROFILE]`:
+
+- `parse_samples(bytes)` menghasilkan tuple `(ordinal, recorded_at, duration_ms, status, method, endpoint)`.
+- `build_sql(parent_row, samples)` mengembalikan satu transaksi.
+- Parent + sample insert bersifat atomik; replay memakai `ON CONFLICT DO NOTHING`.
+- Batas: 16 MiB per input, 10.000 duration point.
+- Hanya `Point` / `http_req_duration` yang disimpan.
+- Nama harus tepat `POST /auth` atau `GET /booking`.
+- Durasi finite ≥ 0 (nol dapat terjadi pada transport failure), timestamp timezone-aware,
+  status `0` (transport failure) atau 100–599.
+- Jumlah sample harus cocok dengan `http_reqs` pada summary.
+
+Untuk profil universal, `--profile` wajib dan summary/sample harus membawa `execution_id`
+serta `mapping_fingerprint` yang sama. Lihat [Profil universal](/performance/profil-universal).
+
+## Grafik per request
+
+Gunakan run ID terpilih, bukan titik yang diestimasi:
+
+```sql
+SELECT ordinal AS request_index, duration_ms, status
+FROM public.performance_samples
+WHERE run_id = '<selected-run-id>'
+ORDER BY ordinal;
+```
+
+Plot XY/kategori: `request_index` di X, `duration_ms` di Y, `status` sebagai anotasi/tabel.
+Ordinal = urutan stream duration point, valid sebagai urutan request karena hanya 1 VU —
+bukan jaminan urutan pada concurrency.
+
+<Note>
+Throughput (`http_reqs.values.rate`) berasal dari aggregate summary dan merupakan rate
+seluruh run, bukan throughput realtime. Jangan menyimpulkan throughput per detik dari
+grafik 10 request.
+</Note>
+
+## Hasil aktual (arsip)
+
+Run 1 VU / 10 iterasi yang tercatat:
+
+| Metrik | Nilai |
+| --- | ---: |
+| Requests | 10 |
+| Checks | 20/20 passed |
+| HTTP failure | 0% |
+| Avg HTTP duration | 266.407 ms |
+| p95 | 374.695 ms |
+| min / max | 240.414 / 478.209 ms |
+| Throughput | 0.756 req/s |
+| Iteration rate | 0.756 iter/s |
+| Received / sent | 845.463 / 222.614 B/s |
+
+Wall-clock sekitar 13.2 detik termasuk sleep dan overhead — bukan 10 × average HTTP duration.
+Sepuluh pengukuran tidak membuktikan percentile yang andal.

@@ -1,0 +1,58 @@
+---
+title: "Prasyarat"
+description: "Tool yang dibutuhkan tiap lapisan, versi minimum, dan cara memverifikasinya."
+icon: "list-check"
+---
+
+Semua perintah dijalankan dari **root repositori**, kecuali disebutkan lain.
+
+## Matriks kebutuhan
+
+| Kebutuhan | Untuk apa | Wajib? |
+| --- | --- | --- |
+| Go sesuai `go.mod` (1.23.12+) | test Go/Godog | Ya |
+| k6 | smoke/load test dan profil universal | Untuk performance |
+| Python 3.11+ | publisher, validator, unit test script | Untuk `make verify` & observability |
+| Node.js | unit test summary/profil | Untuk `make verify` |
+| `psql` + akses `sudo postgres` | setup database lokal | Hanya observability |
+| Grafana yang sudah berjalan | dashboard | Hanya observability |
+| Postman / Gostman | eksplorasi manual | Opsional |
+
+## Verifikasi cepat
+
+```bash
+go version
+k6 version
+python3 --version
+node --version
+```
+
+<Check>
+`go mod download` sekali di awal bila cache kosong. Test default tetap lokal, tetapi pengunduhan modul pertama membutuhkan jaringan.
+</Check>
+
+## Instalasi k6
+
+- Linux: ikuti [petunjuk resmi k6](https://grafana.com/docs/k6/latest/set-up/install-k6/).
+- Windows: `winget install k6 --source winget`.
+- macOS: `brew install k6`.
+
+## Catatan arsitektur toolchain
+
+Proyek ini menggunakan CGO nonaktif untuk test portable:
+
+```bash
+CGO_ENABLED=0 go test ./...
+```
+
+Target `make race` membutuhkan CGO dan Go/GCC **searsitektur**. Jika host arm64 tetapi Go amd64, jalankan:
+
+```bash
+GOARCH=arm64 CGO_ENABLED=1 go test -race ./...
+```
+
+## Dokumen & tool agent (opsional)
+
+- `AGENTS.md` — kebijakan onboarding dan keamanan untuk agent coding.
+- `.pi/skills/k6-*/SKILL.md` — 12 paket instruksi proyek (lihat [Skills](/operasi/skills)).
+- CocoIndex/Graphify bersifat opsional dan **bukan** prasyarat; statusnya dijelaskan di [Indexing](/operasi/indexing).

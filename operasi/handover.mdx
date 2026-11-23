@@ -1,0 +1,96 @@
+---
+title: "Handover teknis"
+description: "Inventaris file, konvensi perubahan, standar pengujian, dan batasan penting untuk penerus proyek."
+icon: "clipboard-check"
+---
+
+## Lingkup
+
+Proyek menguji API (contoh: Restful-Booker), **bukan** mengimplementasikan layanan. Go/Godog
+menguji fungsi; k6 menguji smoke/load; Postman menyediakan reproduksi manual. Tidak ada
+implementasi UI browser, Allure, atau JMeter dalam pipeline ini.
+
+## Inventaris utama
+
+| Path | Tanggung jawab |
+| --- | --- |
+| `api_test.go` | Runner Godog: mock lokal default atau integrasi opt-in. |
+| `config/` | `BaseURL()`, `Credentials()`, endpoint, timeout. |
+| `models/` | DTO auth/booking. |
+| `endpoints/client.go` | Transport + validator Booker. |
+| `endpoints/http_client.go` | Transport HTTP generik (tanpa adapter domain). |
+| `features/`, `steps/` | Gherkin dan implementasi step. |
+| `performance/*-test.js` | Smoke auth/booking, load, ten requests. |
+| `performance/profile-test.js` | Entrypoint engine profil universal. |
+| `performance/lib/` | `api.js`, `summary.js`, `profile.js`, `engine.js`, `profile-summary.js`. |
+| `performance/profiles/` | Contoh profil JSON. |
+| `scripts/` | Runner, publisher, validator, unit test. |
+| `observability/schema.sql` | DDL idempotent + migrasi aditif. |
+| `observability/dashboard.json` | Definisi dashboard (row + 25 panel daun). |
+| `reports/` | Artefak run aktual (bukan source generator). |
+| `postman/`, `gostman/`, `examples/` | Reproduksi manual dan ilustrasi kontrak. |
+| `.github/workflows/test.yml` | CI verifikasi offline. |
+| `Documentasi/` | Pengetahuan proyek (sumber halaman docs ini). |
+| `docs/` | Situs Mintlify. |
+
+## Konvensi perubahan
+
+### Endpoint Go
+
+1. Verifikasi kontrak dari sumber.
+2. Tambah DTO/validator; jangan bocorkan body sensitif.
+3. Pakai `send`/transport generik; jangan duplikasi timeout/redirect/body close.
+4. Perbarui mock `api_test.go`.
+5. Update feature/steps, contoh, Postman, dokumentasi.
+6. Jalankan `make verify` dan race pada toolchain sesuai.
+
+### Skenario Godog
+
+- Given menyiapkan state, When satu aksi utama, Then hasil teramati.
+- Regex berjangkar `^...$`; hindari step ambigu.
+- Reset state di `Before`; jangan global token/result lintas skenario.
+- Jangan menaruh detail HTTP di feature.
+
+### k6
+
+- Gunakan helper `api.js`; token per iterasi.
+- Check bernama jelas; threshold yang benar-benar menggagalkan exit.
+- File scenario terpisah untuk profil beban berbeda.
+- Jangan menyimpan token di tag/label.
+
+### Report/publisher/dashboard
+
+- Edit `performance/lib/summary.js`, bukan artefak HTML/JSON hasil.
+- Perubahan schema harus menyelaraskan publisher, test, query dashboard, dan dokumentasi.
+- Jangan menyisipkan body/header/credential demi debug.
+- Dashboard: edit `observability/dashboard.json`, validasi, lalu import ulang.
+
+## Standar pengujian
+
+- **AAA** (Arrange–Act–Assert) dan table-driven dengan `t.Run`.
+- Uji error path: transport error, cancellation, deadline, body read error, oversize, close.
+- Gunakan `errors.Is`, bukan perbandingan string error.
+- Security regression: no-redirect replay, URL userinfo/query/fragment, escaping report,
+  secret exclusion, null/tipe salah.
+- Mock lulus bukan bukti API asli mengikuti kontrak.
+- Performa: sepakati workload, warm-up, sample size, pengulangan, dan stop condition.
+
+Minimum sebelum merge: `gofmt`, `make verify`, race pada toolchain cocok, `bash -n` untuk
+script shell yang berubah, dan review guard load.
+
+## Batasan yang diketahui
+
+- Dua skenario happy path BDD, bukan seluruh CRUD/negative contract.
+- Validator mengizinkan extra fields dan bukan JSON Schema lengkap.
+- Duplicate key JSON tidak seluruhnya ditolak (decoder Go memakai nilai terakhir).
+- Batas body Go dan k6 tidak identik.
+- Token nonkosong tidak membuktikan keunikan/expiry/keamanan kriptografis.
+- Satu/dua sampel tidak membuktikan SLA/p95.
+- Agregat per run tidak dapat menghasilkan distribusi raw realtime.
+- Eksekusi native Windows dan UI Postman/Gostman belum diuji.
+- CI disediakan tetapi belum dieksekusi di GitHub.
+
+## Dokumen sumber
+
+`Documentasi/HANDOVER.md`, `CODE-FLOW.md`, `PERFORMANCE-REPORT.md`, `FUNCTIONAL-REPORT.md`,
+`GRAFANA.md`, `POSTGRES-GRAFANA.md`, dan `reports/RUN.md`.

@@ -1,0 +1,55 @@
+---
+title: "Status & roadmap"
+description: "Apa yang sudah terbukti, apa yang belum dijalankan, dan langkah berikutnya."
+icon: "road"
+---
+
+## Sudah diverifikasi
+
+| Area | Bukti |
+| --- | --- |
+| Go unit/client/config | `make verify` lulus (`reports/verification.txt`). |
+| Godog integrasi | Auth + booking terhadap API nyata; 2 scenario / 8 step passed. |
+| Race test | `GOARCH=arm64 CGO_ENABLED=1 go test -race` lulus. |
+| k6 auth smoke | 1 request, 2/2 checks, 0% HTTP failure. |
+| k6 booking workflow | 2 request, 4/4 checks, 0% HTTP failure. |
+| Ten requests | 10 requests, 20/20 checks, sample + panel terverifikasi. |
+| Engine profil | 39 kasus penolakan, dua fixture loopback, wrapper portable. |
+| Publisher | Unit test + replay idempoten. |
+| Database disposable | Migrasi berulang, legacy/generic insert, conflict rejection, 25 query panel. |
+| Grafana | Dashboard 25 panel, selector testcase, datasource health OK. |
+
+<Note>
+Bukti di atas berasal dari laporan koordinator dan artefak `reports/`. Angka smoke adalah
+titik waktu, bukan jaminan performa berkelanjutan.
+</Note>
+
+## Belum dijalankan / belum terbukti
+
+- Load publik dan uji kapasitas.
+- Migrasi/provisioning database produksi dan deployment dashboard remote.
+- Eksekusi native Windows/PowerShell end-to-end.
+- Eksekusi UI Postman/Newman dan translasi script Gostman 1.8.3.
+- CI di GitHub (workflow disediakan, belum dieksekusi).
+- CocoIndex indexing (blocked oleh layanan embedding).
+- Render UI Mintlify (selama validasi struktur, belum build/preview).
+
+## Roadmap yang masuk akal
+
+1. **Perluas cakupan kontrak** — skenario negatif, autentikasi endpoint yang benar-benar
+   terproteksi, dan validator schema yang lebih ketat.
+2. **Operasional load** — sepakati baseline, warm-up, sample size, dan stop condition
+   sebelum menjalankan load berizin.
+3. **Migrasi produksi** — backup, migrasi aditif, grant, lalu verifikasi query pada data nyata.
+4. **Parity Go ↔ k6 ↔ Postman** — kurangi drift kontrak saat menambah endpoint.
+5. **Indexing** — pulihkan layanan embedding lokal, lalu verifikasi `ccc status` dan hasil search.
+6. **Dokumentasi** — jaga `docs/` dan `Documentasi/` tetap sinkron dengan implementasi.
+
+## Prinsip evolusi
+
+- Perubahan schema/status harus diperbarui di Go, k6, Postman, publisher, dashboard, dan docs.
+- Jangan menambah fitur dengan melonggarkan guard, threshold, atau sanitasi.
+- Jangan mengklaim hasil baru tanpa artefak run yang sesuai.
+
+Rencana historis: `Documentasi/IMPLEMENTATION.md`, `Documentasi/TODO.md`,
+`Documentasi/UNIVERSAL-PLAN.md`.

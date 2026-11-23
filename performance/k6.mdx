@@ -1,0 +1,115 @@
+---
+title: "Performance k6"
+description: "Script smoke, workflow booking, load dengan guard, serta cara membaca metrik dan threshold."
+icon: "gauge-high"
+---
+
+## Script yang tersedia
+
+| Script | Perilaku | Artefak |
+| --- | --- | --- |
+| `performance/auth-test.js` | 1 VU, 1 iterasi: `POST /auth` | `reports/auth-summary.*` |
+| `performance/booking-test.js` | Auth → token dinamis → `GET /booking` | `reports/booking-summary.*` |
+| `performance/auth-load-test.js` | Load dengan guard izin | `reports/load-summary.*` |
+| `performance/auth-ten-test.js` | 10 iterasi sekuensial + sample JSONL | `reports/ten-*` |
+| `performance/profile-test.js` | Engine profil JSON universal | Direktori run privat |
+
+Runner:
+
+```bash
+bash scripts/run-performance.sh auth
+bash scripts/run-performance.sh booking
+bash scripts/run-performance.sh load
+```
+
+`run-performance.sh` berpindah ke root, membuat `reports/`, dan memakai `pipefail` agar
+exit code k6 tidak hilang karena `tee`.
+
+<Warning>
+Smoke k6 **langsung menghubungi** `BASE_URL`. Default adalah API demo publik. Pastikan
+target dan izinnya, lalu hentikan setelah smoke selesai.
+</Warning>
+
+## Auth dan workflow booking
+
+`performance/lib/api.js`:
+
+- Membaca `__ENV` (bukan `os.Getenv`) dan memangkas slash akhir.
+- Menolak `BASE_URL` dengan credential, query, atau fragment.
+- Timeout 15 detik, `redirects: 0`, tag nama endpoint stabil (`POST /auth`, `GET /booking`).
+- `jsonBody` mengubah parse error menjadi `null` (check gagal terukur, bukan exception).
+- `authenticate()` mengembalikan token **hanya** jika kedua check lolos; jika tidak `null`,
+  sehingga workflow tidak meneruskan Bearer kosong/invalid.
+
+Jumlah request pada run sukses:
+
+- Auth smoke: 1 request, 2 checks.
+- Workflow booking: 2 request, 4 checks.
+- Auth gagal dapat menghentikan workflow sebelum request booking.
+
+<Note>
+`GET /booking` bersifat publik. Bearer dinamis mereproduksi tugas, tetapi suksesnya
+**tidak** membuktikan enforcement autentikasi.
+</Note>
+
+## Load: guard dan batas
+
+```bash
+BASE_URL=https://staging.example.com ALLOW_LOAD_TEST=true \
+  k6 run performance/auth-load-test.js
+```
+
+| Variabel | Default | Batas |
+| --- | --- | --- |
+| `LOAD_VUS` | 5 | integer 1–10 |
+| `LOAD_DURATION_SECONDS` | 30 | integer 1–300 |
+| `LOAD_SLEEP_SECONDS` | 1 | angka 1–60 |
+
+- Nilai non-desimal, nonfinite, di luar rentang, atau bukan integer (VU/durasi) ditolak.
+- Model beban = **closed workload**: tiap VU authenticate lalu sleep. Throughput
+  dipengaruhi latency dan sleep, bukan fixed arrival rate.
+- `ALLOW_LOAD_TEST=true` adalah konfirmasi teknis, bukan izin operasional.
+- Override CLI k6 (`--vus`, `--duration`) dapat melewati guard — jangan dipakai.
+
+## Threshold
+
+Semua script memakai `checks: rate==1`. Load menambahkan:
+
+| Threshold | Arti |
+| --- | --- |
+| `http_req_failed: rate<0.01` | Error HTTP &lt; 1% (bukan ≤ 1%). |
+| `http_req_duration: p(95)<1000` | p95 di bawah 1.000 ms. |
+
+Nilai tersebut **target contoh**, bukan SLA. Check mencatat assertion; threshold yang
+menentukan exit code.
+
+## Membaca metrik
+
+| Metrik | Arti / batas interpretasi |
+| --- | --- |
+| `http_reqs` | Jumlah request, bukan jumlah user. |
+| `iterations` | Iterasi workflow selesai (bisa berisi >1 request). |
+| `checks` | Proporsi assertion berhasil, bukan HTTP error rate. |
+| `http_req_failed` | Proporsi request gagal menurut klasifikasi k6. |
+| `http_req_duration` | Sending + waiting + receiving; tidak termasuk semua overhead DNS/koneksi. |
+| `avg`, `min`, `max` | Rata-rata dan rentang; rata-rata dapat menyembunyikan tail latency. |
+| `p(95)` | Sangat lemah pada sampel kecil. |
+| `vus`, `vus_max` | VU aktif/maksimum, bukan jumlah request. |
+| request rate | Throughput selama pengamatan. |
+
+Contoh interpretasi: 100 request, checks 100%, HTTP error 2%, p95 1.200 ms → dengan target
+contoh di atas, checks lulus tetapi error rate dan latency gagal.
+
+## Menambah scenario atau helper
+
+1. Gunakan helper `api.js` untuk header/timeout/redirect/check yang konsisten.
+2. Pegang token lokal per iterasi; jangan simpan token global lintas VU.
+3. Beri nama check yang jelas dan threshold yang benar-benar menggagalkan exit.
+4. Pisahkan file scenario untuk profil beban berbeda; pertahankan smoke tetap kecil.
+5. Uji logika murni dengan Node (`scripts/test-*.mjs`), lalu jalankan k6 sungguhan untuk
+   modul yang mengimpor `k6/http`.
+
+<Info>
+Jangan mengedit `reports/*-summary.html/json` untuk memperbaiki generator. Ubah
+`performance/lib/summary.js`, uji, lalu jalankan ulang secara sah.
+</Info>

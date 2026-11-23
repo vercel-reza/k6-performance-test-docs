@@ -1,0 +1,70 @@
+---
+title: "Indexing & knowledge graph"
+description: "CocoIndex dan Graphify: cara memakai, batasan, dan status aktual yang tidak boleh diklaim."
+icon: "diagram-project"
+---
+
+Kedua tool ini **opsional** dan bukan prasyarat build/test.
+
+## CocoIndex (semantic search)
+
+Konfigurasi: `.cocoindex_code/settings.yml` (marker portabel). Jalankan dari root proyek.
+
+```bash
+ccc --help
+ccc index
+ccc status
+ccc search 'HTTP client create booking authorization token' --limit 3 --json
+```
+
+Jika daemon belum berjalan dan Anda memulai one-shot:
+
+```bash
+trap 'ccc daemon stop >/dev/null 2>&1' EXIT
+ccc index && ccc status && ccc search '…' --limit 3 --json
+```
+
+Kebijakan file:
+
+- Ekstensi: Go, JavaScript, Python, shell, SQL, Markdown, Gherkin, JSON, YAML — termasuk
+  `.pi/skills/**/*.md`, `AGENTS.md`, `CLAUDE.md`.
+- Maksimum 256 KiB per file.
+- Exclusion eksplisit: `.git`, `.cocoindex_code`, `.env*`, path berisi nama secret/credential,
+  private key, `reports`, raw output, log, cache Python, Graphify output, dependency/build,
+  virtualenv, dan credential store umum.
+- File selection juga mengikuti `.gitignore`; ini **bukan** audit isi secret.
+
+<Warning>
+Status terakhir: `ccc index` **gagal** karena layanan embedding tidak tersedia; `ccc status`
+melaporkan index belum dibuat. Jangan mengklaim pencarian semantik berhasil sampai blocker
+itu teratasi. Global embedding settings berada di luar repo — jangan dicetak/disalin.
+</Warning>
+
+## Graphify (knowledge graph)
+
+Artefak offline: `graphify-out/graph.json`, `graph.html`, `GRAPH_REPORT.md`, `HEALTH.txt`,
+`health.json`, `.graphify_extract.json`, `verification.json`.
+
+```bash
+# gunakan interpreter yang sudah tercatat, bukan install baru
+PYTHON=$(<graphify-out/.graphify_python)
+"$PYTHON" graphify-out/build_index.py
+graphify export html
+graphify query "profile execution fingerprint dashboard" --budget 1500
+```
+
+- Edge `EXTRACTED` berasal dari import/referensi eksplisit; koneksi workflow-only bersifat
+  `INFERRED` dengan rationale.
+- Hash SHA-256 mengidentifikasi snapshot working tree, bukan commit bersih.
+- Perubahan sumber memerlukan review semantik baru sebelum mengganti fragmen.
+- Graphify refresh **tidak** menjalankan ulang test atau memvalidasi deployment Grafana.
+
+## Batas yang harus dijaga
+
+- Ketersediaan tool/index bukan bukti repo sudah ter-index.
+- Refresh index tidak memberi izin untuk mengunggah kode/secret ke layanan eksternal.
+- Jangan mengganti provider embedding atau menyalakan server persisten sebagai workaround.
+- Jika index tidak tersedia, gunakan pencarian file/direct source inspection dan nyatakan
+  freshness-nya tidak diketahui.
+
+Detail historis: `Documentasi/INDEXING.md` dan `Documentasi/GRAPHIFY.md`.

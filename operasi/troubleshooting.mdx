@@ -1,0 +1,70 @@
+---
+title: "Troubleshooting"
+description: "Gejala umum, penyebab, dan pemeriksaan aman tanpa membocorkan secret."
+icon: "wrench"
+---
+
+## Test dan eksekusi
+
+| Gejala | Penyebab & tindakan |
+| --- | --- |
+| Test tidak menyentuh API publik | Normal. Default memakai server lokal; gunakan `RUN_API_TESTS=1` untuk integrasi. |
+| `make race` gagal build | Go/GCC beda arsitektur. Gunakan `GOARCH=arm64 CGO_ENABLED=1 go test -race ./...` pada host yang sesuai. |
+| Godog gagal "undefined step" | Regex step tidak cocok dengan feature. Periksa `steps/api_steps.go`. |
+| Token kosong / JSON invalid | Periksa kontrak, kredensial, dan status tanpa mencetak secret. HTTP 200 tidak menjamin auth sukses. |
+| Redirect 30x | Gunakan URL final tepercaya; jangan membuka redirect otomatis untuk menyiasati error. |
+| Timeout/DNS/5xx | Cek URL, koneksi, rate limit, ketersediaan layanan. Jangan langsung menaikkan beban. |
+| Load ditolak sebelum run | Guard bekerja. Verifikasi izin lalu konfigurasi env; jangan hapus guard. |
+| `k6 is not installed or not on PATH` | Install k6 atau perbaiki PATH. Wrapper memberi exit code 2. |
+| Profil ditolak | Baca pesan validasi; cek pola ID, origin allowlist, batas mode, dan field tak dikenal. |
+
+## Report k6
+
+| Gejala | Penyebab & tindakan |
+| --- | --- |
+| HTML tidak muncul | Cek working directory, direktori `reports/`, dan error init k6. Run gagal sebelum summary bisa tidak menghasilkan artefak. |
+| HTML ada tetapi proses gagal | Periksa exit code dan threshold; file bukan bukti lulus. |
+| Status `NOT EVALUATED` | Threshold belum dievaluasi (run gagal lebih awal). Bukan lulus. |
+| Threshold tidak menggagalkan run | `checks` perlu threshold; pastikan `checks: ['rate==1']` aktif. |
+| Angka run berbeda | API demo berubah, jaringan berbeda. Catat target/waktu/tool/commit. |
+| Sample count tidak cocok | Publisher menolak bila sample ≠ `http_reqs`; periksa artefak dari run yang sama. |
+
+## Functional report
+
+| Gejala | Penyebab & tindakan |
+| --- | --- |
+| `functional-summary.json` hilang | Crash/kompilasi gagal sebelum formatter menulis. Jangan memakai file lama. |
+| Publisher menolak | Summary dan `.meta.json` harus dari run yang sama dan lengkap. |
+| `value = not captured` | Step skipped/undefined, observasi tidak dipancarkan, atau artefak legacy. Bukan nilai hasil tebakan. |
+| Mode tertulis `local` | Memang mock. Jalankan `RUN_API_TESTS=1` untuk integration. |
+
+## Database dan Grafana
+
+| Gejala | Penyebab & tindakan |
+| --- | --- |
+| `permission denied` saat publish | Cek role writer, grant tabel, mode file secret. |
+| `column does not exist` | Migrasi `observability/schema.sql` belum diterapkan. |
+| Login Grafana ditolak | Gunakan akun existing yang benar; setup tidak mereset password admin. |
+| Koneksi DB ditolak | Cek `PG*`, role, dan `PGPASSFILE`; jangan mencetak password. |
+| Dashboard kosong | Cek publication, time picker, zona waktu, dan filter project/profile. **Jangan** menambah beban ke API. |
+| Latest panel menampilkan booking, bukan auth | Latest = run terbaru dalam rentang waktu. Persempit rentang atau lihat histori. |
+| Panel tidak sesuai setelah edit | Import ulang dashboard dari `observability/dashboard.json`; pastikan `overwrite` hanya UID proyek. |
+| Port/host datasource aneh | `localhost` dievaluasi oleh **server** Grafana, bukan browser. |
+| Row tidak bertambah saat publish | Byte report identik → idempotent. Jalankan test baru untuk row baru. |
+
+## Workspace dan tooling
+
+| Gejala | Penyebab & tindakan |
+| --- | --- |
+| `check-workspace.py` gagal | Ada path/JSON/skill/aturan ignore yang hilang; baca pesan error. |
+| Skill tidak terdeteksi | Harness/versi/konfigurasi berbeda. Buka `.pi/skills/<name>/SKILL.md` manual. |
+| CocoIndex gagal index | Embedding service upstream tidak tersedia. Jangan ganti ke provider remote tanpa persetujuan. |
+| Graphify out-of-date | Jalankan refresh sesuai `Documentasi/GRAPHIFY.md`; verifikasi hash sumber. |
+
+## Prinsip diagnosis
+
+1. Reproduksi secara lokal lebih dulu (`make verify`).
+2. Pisahkan kegagalan test, publish, dan visualisasi.
+3. Jangan mencetak secret untuk "melihat isinya".
+4. Catat exit code dan artefak sebelum mengulang.
+5. Jangan melonggarkan threshold/guard untuk membuat hasil terlihat lulus.

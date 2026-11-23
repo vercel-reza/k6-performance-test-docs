@@ -1,0 +1,84 @@
+---
+title: "Postman & Gostman"
+description: "Impor koleksi, alur token dinamis, perbaikan variabel undefined, dan fallback literal untuk Gostman 1.8.3."
+icon: "paper-plane"
+---
+
+## Koleksi dan environment
+
+| Berkas | Isi |
+| --- | --- |
+| `postman/restful-booker.postman_collection.json` | Koleksi v2.1: Create token + Get booking IDs. |
+| `postman/restful-booker.postman_environment.json` | `base_url`, `username`, `password`, `token` kosong. |
+| `gostman/restful-booker.literal.postman_collection.json` | Fallback tanpa variabel/script. |
+
+Alur:
+
+1. **Create token** — `POST {{base_url}}/auth`; memeriksa status 200, JSON valid, token
+   string nonkosong, lalu menyimpan token ke environment. Token lama dibersihkan lebih
+   dulu agar kegagalan tidak memakai token stale.
+2. **Get booking IDs** — `GET {{base_url}}/booking` dengan Bearer `{{token}}`; memeriksa
+   array objek dengan ID integer positif.
+
+Token **selalu** diperoleh dinamis. Jangan mengekspor environment yang masih berisi token
+aktual.
+
+<Note>
+`GET /booking` bersifat publik. Keberhasilan request dengan Bearer bukan bukti bahwa token
+divalidasi server. Status 200 saja juga tidak cukup untuk auth — periksa field `token`.
+</Note>
+
+## Gostman 1.8.3
+
+### Penyebab `{{base_url}}` undefined
+
+Collection lama hanya membawa placeholder, sedangkan nilainya ada di file environment
+terpisah. Import collection saja tidak menjamin environment aktif. Editor juga dapat
+menambahkan `https://` pada URL yang belum ter-resolve — jangan "memperbaiki" dengan
+menambah skema lagi.
+
+Collection terbaru membawa default collection-scoped:
+
+- `base_url`: `https://restful-booker.herokuapp.com` (tanpa trailing slash)
+- `username`: `admin`
+- `password`: `password123`
+- `token`: kosong
+
+### Langkah
+
+<Steps>
+  <Step title="Import collection">
+    Gunakan **Import**, periksa summary/warnings, lalu buka collection **baru** — jangan
+    request lama yang masih terbuka.
+  </Step>
+  <Step title="Aktifkan environment">
+    Buka **Environments**, pilih environment demo, lalu **Use this environment**.
+    Memilih baris untuk mengedit saja bukan aktivasi.
+  </Step>
+  <Step title="Periksa variabel">
+    Pastikan `base_url`, `username`, `password`, `token` enabled. Bila `password` bertipe
+    secret dan kosong setelah import, isi ulang `password123` secara lokal.
+  </Step>
+  <Step title="Periksa URL">
+    URL harus tepat `{{base_url}}/auth`, bukan `https://{{base_url}}/auth`. Resolved URL
+    harus memuat satu skema saja.
+  </Step>
+</Steps>
+
+Jika 1.8.3 tidak menampilkan collection variables, buat environment manual dan aktifkan.
+
+## Fallback tanpa variabel
+
+Import `gostman/restful-booker.literal.postman_collection.json` sebagai **Postman v2.1**.
+File ini memakai URL HTTPS literal dan body auth demo literal, tanpa placeholder, script,
+Bearer, atau token tersimpan. Fallback tidak menyimpan/meneruskan token otomatis.
+
+## Batas verifikasi
+
+- Koleksi divalidasi sebagai JSON dan propertinya diuji offline.
+- Eksekusi UI Postman/Newman dan translasi script `pm.*` di Gostman **belum dijalankan**.
+- Import sukses bukan bukti workflow token berjalan — periksa Checks.
+
+```bash
+python3 -m unittest discover -s gostman -p 'test_*.py' -v
+```

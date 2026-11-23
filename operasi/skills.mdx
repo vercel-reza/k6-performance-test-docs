@@ -1,0 +1,61 @@
+---
+title: "Skills proyek"
+description: "Dua belas paket instruksi agent di .pi/skills dan matriks pemilihannya."
+icon: "wand-magic-sparkles"
+---
+
+## Discovery
+
+- Pi mendeteksi `.pi/skills/` pada **project tepercaya**.
+- Saat startup ditampilkan nama/deskripsi; instruksi lengkap dibaca saat dipakai.
+- Gunakan `/skill:k6-ask-codebase` (atau nama lain) untuk memuat eksplisit.
+- Bila tidak terdeteksi, buka `.pi/skills/<name>/SKILL.md` secara manual.
+
+<Info>
+Skill adalah panduan, **bukan bukti** CLI/layanan/credential/index terpasang. Tidak ada
+executable helper yang disertakan.
+</Info>
+
+## Daftar skill
+
+| Skill | Fokus |
+| --- | --- |
+| `k6-ask-codebase` | Arsitektur, ownership, code-flow dengan bukti sumber. |
+| `k6-fix-code` | Diagnosis regresi dan perbaikan minimal. |
+| `k6-complete-code` | Menyelesaikan implementasi / fitur kecil. |
+| `k6-plan-code` | Rencana perubahan, dependency, acceptance, verifikasi. |
+| `k6-tools` | Pemilihan perintah, prasyarat, alur CI. |
+| `k6-grafana` | Publisher PostgreSQL dan dashboard Grafana. |
+| `k6-integration` | Eksekusi Go API/k6/Postman/Gostman berizin. |
+| `k6-documentation` | Update panduan, contoh, diagram. |
+| `k6-testing` | Test regresi lokal dan analisis coverage gap. |
+| `k6-security` | Transport, secret, keamanan report, otorisasi workload. |
+| `k6-reporting` | Interpretasi bukti functional/performance. |
+| `k6-indexing` | Graphify/CocoIndex dan kesegaran index. |
+
+## Matriks routing
+
+| Tugas | Wajib | Pendukung |
+| --- | --- | --- |
+| Menjelaskan kode/arsitektur | ask-codebase | indexing, documentation |
+| Memperbaiki regresi | fix-code, testing | security, reporting |
+| Menyelesaikan fitur kecil | complete-code, testing | plan-code, security, documentation |
+| Merencanakan pekerjaan multi-file | plan-code, ask-codebase | testing, security |
+| Memilih perintah / inspeksi CI | tools | testing, security |
+| Publisher/Grafana | grafana, security | testing, reporting, tools |
+| Eksekusi API/Postman/Gostman/k6 | integration, security | tools, testing, reporting |
+| Update dokumentasi | documentation, ask-codebase | reporting, security |
+| Test lokal dan coverage | testing | tools, security |
+| Review keamanan | security, testing | fix-code, integration |
+| Discovery/index | indexing | ask-codebase, security |
+| Bukti & interpretasi | reporting | testing, grafana, documentation |
+
+## Kontrak operasi bersama
+
+- Minta scope/izin yang hilang, baca file sebelum edit, verifikasi dengan check relevan.
+- Jangan mengklaim perintah yang tidak dijalankan berhasil.
+- Default Go lokal; k6 smoke nyata; integrasi opt-in; load butuh izin.
+- Pertahankan secret, no-redirect, propagasi error/exit, dan guard workload.
+- Pisahkan bukti `local` dari `integration`.
+- HTML/JSON k6 adalah aggregate, bukan raw sample.
+- Ketersediaan Graphify/index bukan bukti repository sudah ter-index.

@@ -1,0 +1,66 @@
+---
+title: "Keamanan"
+description: "Penanganan secret, kebijakan redirect, batas body, keamanan report, dan otorisasi workload."
+icon: "shield-halved"
+---
+
+## Model ancaman praktis
+
+Proyek ini menyimpan **bukti eksekusi**, bukan data aplikasi. Risiko utama: kebocoran
+credential/token ke report atau log, eksekusi beban tanpa izin, dan penyalahgunaan target
+lintas origin.
+
+## Secret
+
+- Kredensial di repo (`admin` / `password123`) adalah **demo publik**, bukan pola secret produksi.
+- Data nyata → secret store/environment, jangan commit.
+- `.env.observability` mode `0600`, diabaikan Git. Jangan baca/cetak/commit ke report.
+- `.env.example` hanya referensi; tidak dimuat otomatis.
+- Jangan mengaktifkan `--http-debug` atau mengekspor environment Postman berisi token.
+- Publisher memakai `PG*`/`.pgpass`; tidak ada password di argumen CLI atau URL.
+
+## Transport
+
+| Perlindungan | Go | k6 |
+| --- | --- | --- |
+| Redirect tidak diikuti | `http.ErrUseLastResponse` | `redirects: 0` |
+| Timeout request | 15 detik | 15 detik |
+| Batas body | 1 MiB (baca) | Tidak ada hard cap; engine membatasi 1.048.576 code units sebelum parse JSON |
+| Credential di URL | Ditolak | Ditolak |
+| TLS verification | Default Go | Default k6 (aktif) |
+
+<Warning>
+Datasource lokal memakai `sslmode=disable` dan hanya cocok untuk loopback. Deployment
+remote wajib TLS/`verify-full`, firewall, dan secret manager.
+</Warning>
+
+## Report dan artefak
+
+- Report hanya aggregate; **bukan** jaminan bebas informasi sensitif.
+- Tinjau URL internal, metadata, dan console sebelum membagikan.
+- Jangan mengunggah response token, body mentah, atau `samples.jsonl` tanpa review.
+- Console functional dan profil privat dianggap artefak privat.
+- Jangan mengedit artefak hasil untuk "memperbaiki" status; jalankan ulang secara sah.
+
+## Otorisasi workload
+
+- Load test hanya dengan izin pemilik target, batas beban, monitoring, dan stop condition.
+- `ALLOW_LOAD_TEST=true` adalah konfirmasi teknis, bukan izin.
+- Allowlist origin profil adalah pagar teknis, bukan izin lintas API.
+- `PERF_ALLOW_HTTP=true` membuka transport tidak terenkripsi — jangan untuk credential nyata.
+- CI tidak menjalankan smoke/load publik maupun publikasi database otomatis.
+
+## Data yang tidak pernah disimpan
+
+- Header Authorization, token, password.
+- Body request/response.
+- URL/query mentah pada sample.
+- `error_message` Cucumber mentah.
+- Attachment/docstring/table Gherkin.
+
+## Review sebelum publish
+
+1. Pastikan hanya artefak run yang ingin dibagikan.
+2. Cek mode (`local` vs `integration`) sudah benar.
+3. Pastikan report tidak memuat hostname internal yang tidak boleh dipublikasikan.
+4. Pastikan backup database dilindungi (memuat data report).

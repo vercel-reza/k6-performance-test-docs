@@ -1,0 +1,79 @@
+---
+title: "Workspace & validasi"
+description: "Validator struktur, portabilitas instruksi agent, dan onboarding lokal yang aman."
+icon: "folder-open"
+---
+
+## Onboarding lokal
+
+1. Baca `AGENTS.md`, `.env.example` (referensi saja), `Makefile`, dan skill terkait.
+2. Cek Go (sesuai `go.mod`), Python 3, dan Node. k6 hanya untuk performance.
+3. Jalankan:
+
+```bash
+python3 scripts/check-workspace.py
+make test
+make vet
+make verify
+```
+
+4. Integrasi eksternal hanya opt-in: `RUN_API_TESTS=1`. Tinjau target, izin, dan batas load.
+
+<Warning>
+Pemulihan dependency dapat membutuhkan jaringan. Jangan start proses background
+persisten sebagai bagian onboarding.
+</Warning>
+
+## Validator workspace
+
+`python3 scripts/check-workspace.py`:
+
+- Bekerja dari direktori mana pun (menggunakan lokasi file-nya sendiri).
+- Hanya memakai standard library Python.
+- Memeriksa path source/panduan wajib, 12 skill (nama + deskripsi), JSON dashboard,
+  keberadaan schema SQL, dan aturan ignore secret.
+- **Tidak** membaca isi file secret, tidak menghubungi layanan, tidak menginstal dependency,
+  tidak menjalankan test.
+- Exit `0` = pemeriksaan struktural lulus; exit `1` = ada entri hilang/invalid.
+
+Di checkout Git, validator juga menguji perilaku ignore efektif memakai nama file sintetis —
+tidak pernah membaca isi secret.
+
+<Note>
+Validator ini bukan audit keamanan, bukan uji migrasi SQL, bukan validasi YAML penuh, dan
+bukan bukti tool/layanan terpasang.
+</Note>
+
+## Portabilitas instruksi agent
+
+- `AGENTS.md` adalah kebijakan utama; `CLAUDE.md` hanya menunjuk ke sana.
+- Skill proyek ada di `.pi/skills/<name>/SKILL.md`.
+- Discovery bergantung harness/versi/konfigurasi. Jika tidak terdeteksi, buka file manual.
+- Skill tidak menginstal tool, mengaktifkan MCP, mem-provision database, memberi izin
+  network, atau menjamin index tersedia.
+- Jangan mengklaim integrasi graph/search berjalan bila belum diverifikasi.
+
+## Menjalankan situs dokumentasi
+
+```bash
+make docs            # preview di 0.0.0.0:2000 (LAN)
+make docs-validate   # mint validate
+```
+
+- CLI dipin ke `mint@4.2.1184` lewat `docs/package.json`; `docs/node_modules/` diabaikan Git.
+- Jika dependency belum ada, `make docs` memasangnya sekali (`npm --prefix docs install`).
+- `--host` adalah saklar boolean untuk mengekspos ke jaringan (bukan `--host 0.0.0.0`).
+- Port dapat diubah: `make docs DOC_PORT=3000`.
+- Server berjalan di foreground; hentikan dengan `Ctrl+C`.
+
+## Perintah lintas platform
+
+| Kebutuhan | Bash | PowerShell |
+| --- | --- | --- |
+| Set env | `export NAME=value` | `$env:NAME = 'value'` |
+| Hapus env | `unset NAME` | `Remove-Item Env:NAME` |
+| Buka report | `xdg-open file` | `Start-Process file` |
+| Runner universal | `python3 scripts/run-profile.py …` | `python scripts/run-profile.py …` |
+
+Wrapper dan publisher Python tidak membutuhkan Bash/Make, tetapi eksekusi native Windows
+belum diuji end-to-end.

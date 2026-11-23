@@ -1,0 +1,206 @@
+---
+title: "Referensi profil"
+description: "Kontrak lengkap profil JSON v1: field wajib, pola ID, assertion, ekstraksi, dan contoh."
+icon: "file-code"
+---
+
+## Kerangka minimal
+
+```json
+{
+  "version": 1,
+  "project": "multi-web",
+  "id": "two-websites",
+  "targets": {
+    "web-a": { "originEnv": "WEB_A_ORIGIN" },
+    "web-b": { "originEnv": "WEB_B_ORIGIN" }
+  },
+  "variables": {},
+  "execution": { "mode": "smoke", "vus": 1, "iterations": 1, "pauseSeconds": 0 },
+  "requests": [
+    { "id": "home-a", "target": "web-a", "method": "GET", "path": "/", "assert": { "status": [200] } },
+    { "id": "home-b", "target": "web-b", "method": "GET", "path": "/", "assert": { "status": [200] } }
+  ]
+}
+```
+
+## Root
+
+| Field | Wajib | Aturan |
+| --- | --- | --- |
+| `version` | Ya | Harus `1`. |
+| `project` | Ya | ID publik `^[a-z][a-z0-9_-]{0,62}$`, maks 63 karakter. |
+| `id` | Ya | Pola sama; dipakai sebagai nama profil. |
+| `targets` | Ya | Objek alias → origin. |
+| `variables` | Ya | Objek nama → value/env. |
+| `execution` | Ya | Mode dan batas workload. |
+| `requests` | Ya | Array 1–10 request berurutan. |
+
+Field tak dikenal pada objek kontrak **ditolak**. Field di dalam JSON payload bebas
+mengikuti API target.
+
+## Targets
+
+| Field | Aturan |
+| --- | --- |
+| `origin` | Literal canonical, tanpa path/query/fragment/credential. |
+| `originEnv` | Nama environment yang berisi origin. |
+
+Setiap alias memakai **tepat satu** dari `origin` atau `originEnv`. Tidak ada target default
+universal — target harus dideklarasikan di profil.
+
+## Variables
+
+| Field | Aturan |
+| --- | --- |
+| `value` | String, number, atau boolean. |
+| `env` | String tidak kosong. |
+| `secret` | Boolean opsional — penanda, bukan enkripsi. |
+
+Setiap variabel memakai tepat satu `value` **atau** `env`. Nama internal/env:
+`^[a-zA-Z][a-zA-Z0-9_-]{0,63}$` (uppercase seperti `WEB_A_ORIGIN` diperbolehkan).
+
+## Execution
+
+| Field | smoke | sample | load |
+| --- | --- | --- | --- |
+| `vus` | 1 | 1 | 1–10 |
+| `iterations` | 1 | 1–10 | tidak boleh |
+| `durationSeconds` | tidak boleh | tidak boleh | integer 1–300 |
+| `pauseSeconds` | 0–60 | 1–60 | 1–60 |
+| `ALLOW_LOAD_TEST` | — | — | wajib `true` |
+
+`vus` dan durasi harus integer; `pauseSeconds` harus finite. Pause terjadi setelah
+workflow selesai.
+
+## Requests
+
+| Field | Wajib | Aturan |
+| --- | --- | --- |
+| `id` | Ya | ID publik unik dalam profil. |
+| `target` | Ya | Harus alias yang dideklarasikan. |
+| `method` | Ya | GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS. |
+| `path` | Ya | Literal diawali satu `/`; tanpa query/fragment/traversal. |
+| `headers` | Tidak | Nama/valu valid, tanpa CR/LF/control. |
+| `query` | Tidak | Objek nama → primitive; di-URL-encode. |
+| `json` | Tidak | Body JSON; Content-Type ditambahkan bila belum ada. |
+| `assert` | Ya | Status wajib; JSON/latency opsional. |
+| `extract` | Tidak | Variabel dari response. |
+
+### Path dan header yang dilarang
+
+- Absolute URL atau `//host`.
+- `?` di path (gunakan `query`).
+- Traversal `.`/`..`, backslash, whitespace/control, fragment, encoding berbahaya/nested.
+- Header `Host`, `Content-Length`, `Transfer-Encoding`, `Connection`.
+- Template `{{name}}` pada path (hanya value header/query/JSON).
+
+### Interpolasi
+
+`{{name}}` hanya pada **value** header, query, dan JSON; bersifat nonrekursif. Variabel
+harus sudah didefinisikan atau diekstrak request sebelumnya. Extraction tidak boleh
+menimpa nama yang sudah dikenal. Hasil interpolasi header dicek ulang agar token tidak
+menyuntikkan baris header baru.
+
+## Assertions
+
+```json
+"assert": {
+  "status": [200, 201],
+  "json": [
+    { "pointer": "/ok", "equals": true },
+    { "pointer": "/items/0/id", "type": "number", "nonEmpty": true }
+  ],
+  "maxLatencyMs": 1500
+}
+```
+
+| Aturan | Arti |
+| --- | --- |
+| `status` | Array tidak kosong berisi 100–599; juga diteruskan ke `http.expectedStatuses`. |
+| `pointer` | JSON Pointer RFC6901. |
+| `type` | `string`, `number`, `boolean`, `object`, `array`, `null`. |
+| `equals` | Perbandingan nilai. |
+| `exists` | `false` memeriksa ketidakadaan field. |
+| `nonEmpty` | Menolak null, string kosong/whitespace, objek/array kosong. |
+| `maxLatencyMs` | Harus positif. |
+
+Contoh negative test `status: [401]`: respons 401 yang diharapkan dapat lulus checks dan
+tidak dihitung sebagai `http_req_failed`. Kegagalan assertion JSON/latency tetap dapat
+menggagalkan checks.
+
+## Extraction
+
+```json
+"extract": {
+  "token": { "pointer": "/token", "type": "string", "nonEmpty": true, "secret": true }
+}
+```
+
+- Hasil harus primitive.
+- `secret: true` hanya menandai agar tidak dicetak, bukan enkripsi.
+- Variabel hasil ekstraksi bersifat **iteration-local**.
+- Request yang gagal menghentikan dependensi berikutnya pada iterasi itu, bukan seluruh run.
+
+## JSON Pointer
+
+| Pointer | Menunjuk |
+| --- | --- |
+| `""` | Dokumen utuh |
+| `/items/0/id` | Elemen array lalu field |
+| `/a~1b/~0key` | Key `a/b` lalu `~key` |
+
+Escape hanya `~1` (untuk `/`) dan `~0` (untuk `~`). Token path `__proto__`, `prototype`,
+`constructor` ditolak. Ini bukan JSONPath atau ekspresi executable.
+
+## Contoh multi-target lengkap
+
+```json
+{
+  "version": 1,
+  "project": "multi-target",
+  "id": "workflow",
+  "targets": {
+    "a": { "originEnv": "WEB_A_ORIGIN" },
+    "b": { "originEnv": "WEB_B_ORIGIN" }
+  },
+  "variables": {
+    "username": { "env": "WEB_USERNAME" },
+    "password": { "env": "WEB_PASSWORD", "secret": true }
+  },
+  "execution": { "mode": "smoke", "vus": 1, "iterations": 1, "pauseSeconds": 0 },
+  "requests": [
+    {
+      "id": "login",
+      "target": "a",
+      "method": "POST",
+      "path": "/login",
+      "json": { "username": "{{username}}", "password": "{{password}}" },
+      "assert": { "status": [200] },
+      "extract": {
+        "token": { "pointer": "/token", "type": "string", "nonEmpty": true, "secret": true }
+      }
+    },
+    {
+      "id": "resource",
+      "target": "b",
+      "method": "GET",
+      "path": "/resource",
+      "headers": { "Authorization": "Bearer {{token}}" },
+      "assert": { "status": [200], "json": [{ "pointer": "/ok", "equals": true }] }
+    }
+  ]
+}
+```
+
+<Note>
+Contoh di atas memakai placeholder `.example`, bukan target yang sudah dijalankan. Pastikan
+issuer/audience dan kebijakan pemilik kedua API mengizinkan pemakaian token lintas target.
+</Note>
+
+## Validasi terkait
+
+```bash
+node scripts/test-profile.mjs
+python3 scripts/test-profile-k6.py
+```

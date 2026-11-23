@@ -1,0 +1,97 @@
+---
+title: "Mulai cepat"
+description: "Dari verifikasi lokal sampai publish hasil ke PostgreSQL dalam lima langkah."
+icon: "rocket"
+---
+
+<Steps>
+  <Step title="Verifikasi lokal">
+    ```bash
+    make verify
+    ```
+
+    Perintah ini menjalankan test Go, `go vet`, validasi JSON, serta unit test report,
+    publisher, dashboard, profil, dan workspace. Tidak ada request ke API publik.
+  </Step>
+
+  <Step title="Functional test (mock lokal)">
+    ```bash
+    make functional
+    ```
+
+    Godog berjalan terhadap server `httptest` in-process. Hasilnya ditulis ke
+    `reports/functional-summary.json` beserta `.meta.json` dan console log.
+  </Step>
+
+  <Step title="Smoke k6 ke target">
+    ```bash
+    make smoke      # auth
+    make booking    # auth -> GET booking
+    ```
+
+    Smoke memakai 1 VU / 1 iterasi dan **langsung menghubungi `BASE_URL`**. Default
+    adalah API demo publik Restful-Booker. Pastikan target dan izinnya sesuai.
+  </Step>
+
+  <Step title="Publish aggregate (opsional)">
+    ```bash
+    make publish
+    make publish-functional
+    ```
+
+    Membutuhkan `.env.observability` (mode `0600`) dan database yang sudah
+    diprovision. Lihat [Publishing](/observability/publishing).
+  </Step>
+
+  <Step title="Buka dashboard">
+    Buka `http://katalon-home.orb.local:3005/d/k6-performance-test/k6-performance-test`.
+    Data muncul setelah publish dan refresh, bukan saat request berjalan.
+  </Step>
+</Steps>
+
+## Target Make yang paling sering dipakai
+
+| Target | Isi |
+| --- | --- |
+| `make test` | `go test -count=1 ./...` (server lokal) |
+| `make vet` | `go vet ./...` |
+| `make race` | `go test -race` (butuh CGO searsitektur) |
+| `make verify` | gabungan pemeriksaan lokal, tanpa network |
+| `make verify-profiles` | tambahan uji k6 profil dengan dua fixture loopback |
+| `make functional` | Godog + report JSON/HTML |
+| `make smoke` / `make booking` | k6 smoke, simpan console + summary |
+| `make load` | k6 load — **butuh izin eksplisit** |
+| `make publish` | publish summary auth + booking |
+| `make publish-functional` | publish hasil functional terakhir |
+| `make observability` | provision DB/role/datasource/dashboard |
+| `make workspace` | validasi struktur workspace |
+
+Daftar lengkap: [Referensi CLI](/referensi/cli).
+
+## Integrasi nyata (opt-in)
+
+```bash
+RUN_API_TESTS=1 go test -count=1 -v ./...
+```
+
+```powershell
+$env:RUN_API_TESTS = '1'
+go test -v ./...
+Remove-Item Env:RUN_API_TESTS
+```
+
+<Warning>
+`RUN_API_TESTS` hanya berpengaruh pada runner Go. k6 tidak membaca variabel ini dan
+tidak memiliki mode mock otomatis — smoke k6 selalu memakai target yang dikonfigurasi.
+</Warning>
+
+## Load hanya dengan izin
+
+```bash
+BASE_URL=https://staging.example.com ALLOW_LOAD_TEST=true \
+  k6 run performance/auth-load-test.js
+```
+
+Guardrail: `LOAD_VUS` 1–10, `LOAD_DURATION_SECONDS` 1–300, `LOAD_SLEEP_SECONDS` 1–60.
+Override CLI k6 dapat mengubah beban efektif, jadi jangan dipakai untuk melewati
+batas yang disepakati. Detail: [Performance k6](/performance/k6).

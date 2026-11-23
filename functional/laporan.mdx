@@ -1,0 +1,117 @@
+---
+title: "Laporan functional"
+description: "Artefak Cucumber JSON, metadata evidence, sanitasi, dan publikasi step ke PostgreSQL."
+icon: "file-lines"
+---
+
+## Menghasilkan report
+
+```bash
+# Mock lokal (aman)
+make functional
+# atau
+bash scripts/run-functional.sh
+
+# Integrasi nyata (opt-in)
+RUN_API_TESTS=1 bash scripts/run-functional.sh
+```
+
+Runner berpindah ke root, memakai `umask 077`, menghapus artefak lama, lalu menjalankan
+tepat `CGO_ENABLED=0 go test -count=1 -v ./...` dengan `FUNCTIONAL_REPORT` diset.
+
+| Artefak | Isi |
+| --- | --- |
+| `reports/functional-console.log` | Output Godog dan Go test. |
+| `reports/functional-summary.json` | Cucumber JSON asli dari formatter Godog v0.15.1. |
+| `reports/functional-summary.json.meta.json` | UTC, `execution_mode`, `test_data`, dan evidence per step. |
+
+Tanpa `FUNCTIONAL_REPORT`, `go test` biasa tidak menulis report. Crash atau kegagalan
+kompilasi dapat meninggalkan report kosong — jangan menggantinya dengan file lama.
+
+## Kontrak metadata evidence
+
+```json
+{
+  "evidence_version": 1,
+  "cases": [
+    {
+      "id": "runtime-pickle-id",
+      "uri": "features/auth.feature",
+      "scenario": "Autentikasi berhasil dengan kredensial valid",
+      "steps": [
+        { "id": "runtime-step-id", "step": "…", "value": "…", "captured": true }
+      ]
+    }
+  ]
+}
+```
+
+- Sebelum skenario: pilih case aktif.
+- Sebelum step: bersihkan observasi.
+- Sesudah step: tangkap **hanya** value yang dipancarkan implementasi step.
+
+Nilai yang diizinkan: kredensial terkonfigurasi (redacted), `/booking`, method/path +
+status HTTP aktual, status numerik, presence/invalidity token (redacted), dan jumlah
+booking hasil decode. Value tak dikenal **menggagalkan publikasi**.
+
+<Note>
+Step skipped/undefined atau metadata legacy menghasilkan `value = "not captured"` dan
+`evidence = false`. Status tidak pernah dipakai sebagai pengganti value aktual.
+</Note>
+
+## Sanitasi
+
+Publisher hanya menerima field allowlist dan **tidak** menyimpan:
+
+- `error_message` Cucumber
+- response body
+- attachment/embedding/docstring/table
+- dokumen JSON lengkap
+
+`error_category` adalah kategori status (`none`, `failed`, `undefined`, `pending`,
+`skipped`, `ambiguous`) — bukan pesan server. Console report tetap dianggap artefak privat.
+
+## Publikasi
+
+```bash
+# PG* environment / .pgpass dikelola aman; tidak ada password di CLI
+python3 scripts/publish-functional.py reports/functional-summary.json
+```
+
+- ID run = SHA-256(byte report + byte metadata) → 64 hex.
+- Replay pasangan identik bersifat idempoten.
+- Run + step insert dalam satu transaksi (`ON CONFLICT DO NOTHING`, foreign key).
+- Report tidak lengkap gagal **fail closed**, bukan dianggap sukses.
+- Publikasi sengaja terpisah dari status test: kegagalan publish tidak mengubah hasil test.
+
+## Skema tujuan
+
+| Kolom | Makna |
+| --- | --- |
+| `functional_runs.execution_mode` | `local` atau `integration`. |
+| `functional_runs.status` | `passed` hanya bila semua step passed. |
+| `functional_runs.test_data` | Deskripsi sumber data (bukan credential). |
+| `functional_steps.value` | Observasi aman. |
+| `functional_steps.evidence` | `true` bila observasi benar-benar tertangkap. |
+
+Data lama mendapat default `not captured` / `false`. Migrasi aditif ada di
+`observability/schema.sql` — lihat [Skema PostgreSQL](/observability/skema-postgres).
+
+## Interpretasi di dashboard
+
+- Panel functional menampilkan total per mode, status run, ringkasan scenario, dan trace step.
+- Identitas testcase = `run_id` + hash(`uri`, `scenario_line`).
+- Label lokal tetap terlihat; **jangan** menggabungkannya dengan integration saat menilai
+  kesiapan API.
+- Panel kosong berarti belum ada record pada rentang waktu, bukan test lulus.
+- Durasi step = waktu langkah Godog, bukan latency HTTP k6.
+
+## Verifikasi offline
+
+```bash
+python3 scripts/test-publish-functional.py
+```
+
+Suite ini memakai fixture formatter Godog (passed/failed/pending/undefined/skipped),
+menguji ID deterministik, transaksi SQL, escaping, dan penolakan raw error. Tidak ada
+database atau network call.

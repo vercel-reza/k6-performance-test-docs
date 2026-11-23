@@ -1,0 +1,127 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "K6 Performance Test",
+  "description": "Dokumentasi universal HTTP automation: Go + Godog, k6, PostgreSQL, dan Grafana.",
+  "colors": {
+    "primary": "#16A34A",
+    "light": "#4ADE80",
+    "dark": "#15803D"
+  },
+  "appearance": {
+    "default": "system"
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "Repository",
+        "href": "https://github.com/rezapace/k6-performance-test"
+      }
+    ]
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Panduan",
+        "groups": [
+          {
+            "group": "Mulai",
+            "pages": [
+              "index",
+              "mulai/prasyarat",
+              "mulai/mulai-cepat",
+              "mulai/konfigurasi"
+            ]
+          },
+          {
+            "group": "Arsitektur",
+            "pages": [
+              "arsitektur"
+            ]
+          },
+          {
+            "group": "Functional — Go + Godog",
+            "pages": [
+              "functional/go-godog",
+              "functional/laporan"
+            ]
+          },
+          {
+            "group": "Performance — k6",
+            "pages": [
+              "performance/k6",
+              "performance/laporan",
+              "performance/sepuluh-request"
+            ]
+          },
+          {
+            "group": "Profil HTTP universal",
+            "pages": [
+              "performance/profil-universal",
+              "performance/referensi-profil"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Observability",
+        "groups": [
+          {
+            "group": "PostgreSQL & Grafana",
+            "pages": [
+              "observability/setup",
+              "observability/skema-postgres",
+              "observability/dashboard",
+              "observability/publishing"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Referensi",
+        "groups": [
+          {
+            "group": "CLI & Konfigurasi",
+            "pages": [
+              "referensi/cli",
+              "referensi/environment"
+            ]
+          },
+          {
+            "group": "Manual & Keamanan",
+            "pages": [
+              "manual/postman-gostman",
+              "operasi/keamanan",
+              "operasi/troubleshooting"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Operasi",
+        "groups": [
+          {
+            "group": "Workspace & Agent",
+            "pages": [
+              "operasi/workspace",
+              "operasi/skills",
+              "operasi/indexing"
+            ]
+          },
+          {
+            "group": "Handover",
+            "pages": [
+              "operasi/handover",
+              "operasi/status"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/rezapace/k6-performance-test"
+    }
+  }
+}

@@ -1,0 +1,98 @@
+---
+title: "Publishing"
+description: "Mengirim aggregate, functional report, dan sample ke PostgreSQL secara idempoten dan aman."
+icon: "upload"
+---
+
+## Tiga publisher
+
+| Perintah | Input | Tabel |
+| --- | --- | --- |
+| `publish-report.py SUMMARY.json` | Summary k6 aggregate | `performance_runs` |
+| `publish-functional.py SUMMARY.json` | Cucumber JSON + `.meta.json` | `functional_runs`, `functional_steps` |
+| `publish-samples.py SUMMARY.json SAMPLES.jsonl [--profile P]` | Summary + JSONL | `performance_runs` + `performance_samples` |
+
+Semua memakai libpq `PG*` atau `.pgpass`; tidak ada password di argumen CLI.
+
+## Menyiapkan koneksi
+
+```bash
+source .env.observability   # hanya file yang sudah ditinjau, mode 0600
+python3 scripts/publish-report.py reports/auth-summary.json
+unset PGPASSWORD GRAFANA_PG_PASSWORD
+```
+
+Atau lewat Make:
+
+```bash
+make publish              # auth + booking
+make publish-functional
+make publish-ten
+```
+
+Make memuat `.env.observability` di subshell, sehingga variabel tidak menetap di shell.
+
+## Sifat idempotent
+
+- Performance: ID = UUID v5 dari hash **byte** report.
+- Functional: ID = SHA-256(report bytes + metadata bytes).
+- Sample: parent + sample insert dalam satu transaksi, `ON CONFLICT DO NOTHING`.
+- Mengubah nama file tidak mengubah ID; mengubah byte/format JSON mengubah ID.
+- Replay tidak pernah menimpa atau menghapus titik lama.
+
+## Yang ditolak
+
+| Input | Alasan |
+| --- | --- |
+| Report tanpa threshold | Tidak boleh tampak seperti pass. |
+| Report kosong/invalid/tidak lengkap | Gagal fail closed. |
+| Metadata functional tidak cocok | Tidak boleh dipasangkan sembarang. |
+| Sample count ≠ `http_reqs` | Bukti tidak konsisten. |
+| Sample status di luar 0/100–599 | Nilai tidak valid. |
+| Summary/sample beda `execution_id` atau `mapping_fingerprint` | Artefak dari run berbeda. |
+| Profil tidak cocok dengan summary | Mapping tidak tepercaya. |
+
+Report **FAILED tetap boleh disimpan** — kegagalan threshold adalah bukti yang sah.
+
+## Urutan aman saat publish
+
+1. Pastikan test selesai dan exit code dicatat.
+2. Periksa artefak (HTML/JSON/meta) tidak memuat secret.
+3. Pastikan database sudah dimigrasi (kolom `project_id`, `profile_id`, `target_alias`).
+4. Jalankan publisher; catat exit code publisher **terpisah** dari exit code test.
+5. Refresh dashboard pada rentang waktu yang sesuai.
+
+<Note>
+Publish gagal ≠ test gagal. Jika publish gagal, diagnosis koneksi/role/schema — jangan
+mengulang load ke target hanya untuk memperbaiki dashboard.
+</Note>
+
+## Verifikasi offline
+
+```bash
+python3 scripts/test-publish-report.py
+python3 scripts/test-publish-functional.py
+python3 scripts/test-publish-samples.py
+python3 scripts/test-report-profiles.py
+```
+
+Opsional untuk database lokal **disposable** (bukan DB operasional):
+
+```bash
+RUN_DB_TESTS=1 python3 scripts/test-universal-db.py
+```
+
+Uji ini membuat lalu menghapus database sementara; tidak membuktikan migrasi/deployment
+remote.
+
+## Troubleshooting cepat
+
+| Gejala | Periksa |
+| --- | --- |
+| `permission denied` | Role writer, grant tabel, mode file secret. |
+| `column ... does not exist` | Migrasi belum diterapkan. |
+| Data tidak muncul di Grafana | Publish sukses? Time range? Zona waktu? Filter project/profile? |
+| Row tidak bertambah | Byte laporan identik (idempotent) — bukan error. |
+| `sslmode`/koneksi gagal | Topologi DB vs Grafana; `localhost` dievaluasi dari server Grafana. |
+
+Detail skema dan query: [Skema PostgreSQL](/observability/skema-postgres).

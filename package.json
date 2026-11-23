@@ -1,0 +1,13 @@
+{
+  "name": "k6-performance-test-docs",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Situs dokumentasi Mintlify proyek k6-performance-test",
+  "scripts": {
+    "dev": "mint dev --host --no-open --port 2000",
+    "validate": "mint validate"
+  },
+  "devDependencies": {
+    "mint": "4.2.1184"
+  }
+}

@@ -1,0 +1,107 @@
+---
+title: "Go + Godog"
+description: "Functional API testing: feature Gherkin, step definitions, HTTP client, validator, dan mode local vs integration."
+icon: "vial"
+---
+
+## Struktur
+
+| Berkas | Isi |
+| --- | --- |
+| `features/auth.feature` | Kredensial valid → `POST /auth` → status 200 → token valid. |
+| `features/booking.feature` | `GET /booking` → status 200 → array ID valid. |
+| `steps/api_steps.go` | Registrasi step regex, reset state per skenario, validasi status/body. |
+| `endpoints/client.go` | `NewClient`, `CreateToken`, `GetBookings`, `send`, `ValidateToken`, `ValidateBookings`. |
+| `config/config.go` | `BaseURL()`, `Credentials()`, konstanta endpoint dan timeout. |
+| `models/models.go` | DTO `AuthRequest`, `AuthResponse`, `BookingID`. |
+| `api_test.go` | Runner `TestAPI`: memilih mock atau target asli, lalu menjalankan Godog strict. |
+
+## Menjalankan
+
+```bash
+# Default: httptest lokal, tanpa request eksternal
+go test ./...
+make test
+
+# Integrasi nyata (opt-in)
+RUN_API_TESTS=1 go test -count=1 -v ./...
+
+# Integrasi dengan environment kustom
+BASE_URL=https://restful-booker.herokuapp.com \
+BOOKER_USERNAME=admin BOOKER_PASSWORD=password123 \
+RUN_API_TESTS=1 go test -v ./...
+```
+
+```powershell
+go test ./...
+$env:RUN_API_TESTS = '1'
+$env:BASE_URL = 'https://restful-booker.herokuapp.com'
+go test -v ./...
+Remove-Item Env:RUN_API_TESTS
+```
+
+<Info>
+"Offline" di sini berarti **tidak menghubungi API publik**, bukan tanpa jaringan sama
+sekali. `go test` pertama dapat mengunduh modul.
+</Info>
+
+## Mode local vs integration
+
+| Aspek | Local (default) | Integration (`RUN_API_TESTS=1`) |
+| --- | --- | --- |
+| Target | `httptest.NewServer` in-process | `BASE_URL` environment |
+| Bukti | Logika test + kontrak request | Perilaku API nyata |
+| Network | Tidak ada | Ada |
+| Label report | `execution_mode: local` | `execution_mode: integration` |
+
+Mock lokal sengaja ketat:
+
+- `/auth` hanya menerima `POST` dengan `Content-Type: application/json` dan body yang
+  dapat didecode serta cocok dengan kredensial lokal; jika tidak, `400`.
+- `GET /booking` mengembalikan satu booking ID.
+- Rute/method lain `404`.
+
+Kegagalan dikembalikan sebagai exit code nonzero. `Strict: true` membuat step yang tidak
+terdefinisi tidak dianggap sukses diam-diam.
+
+## Kontrak yang divalidasi
+
+`ValidateToken`:
+
+1. Unmarshal seluruh body sebagai objek map `RawMessage` — malformed JSON, trailing data,
+   atau array ditolak.
+2. `token` harus string dan nonkosong setelah trim.
+3. Missing/null/number/blank ditolak.
+4. Error tidak menyertakan token atau raw body.
+
+`ValidateBookings`:
+
+1. Body harus array objek; top-level `null` ditolak, array kosong diterima.
+2. Setiap elemen wajib memiliki `bookingid` bertipe integer dan > 0.
+3. Elemen null, field hilang, string/pecahan/negatif/nol ditolak; extra fields diizinkan.
+
+## Transport dan keamanan
+
+`NewClient(baseURL, optionalHTTPClient)`:
+
+- Menolak URL nonabsolut/non-HTTP(S), host kosong, userinfo, query, dan fragment.
+- Timeout default 15 detik; bila client disuplai, setting disalin (caller tidak dimutasi).
+- `CheckRedirect` selalu diganti ke `http.ErrUseLastResponse` → kredensial tidak direplay.
+- Body dibaca maksimal 1 MiB + 1 byte untuk mendeteksi oversize.
+- Context caller dihormati; body selalu ditutup.
+- HTTP 401/500/307 menghasilkan `Result` tanpa transport error — assertion status ada di step.
+
+## Menambah endpoint atau skenario
+
+1. Verifikasi method/path, schema, status sukses/error, dan mekanisme auth dari kontrak.
+2. Tambah DTO di `models/` dan konstanta path bila perlu.
+3. Tambah metode client yang memakai `send` — jangan duplikasi timeout/body close/redirect.
+4. Tambah validator tanpa membocorkan body sensitif.
+5. Uji dengan `httptest` dan fake `RoundTripper`, lalu tambah feature/steps.
+6. Perbarui mock di `api_test.go` agar suite default tetap deterministik.
+7. Update contoh, Postman, dan dokumentasi; jalankan `make verify`.
+
+<Warning>
+Jangan menaruh kredensial, payload, atau token di nama skenario, docstring, tabel, atau
+attachment Gherkin. Formatter Cucumber native menyimpan teks feature apa adanya.
+</Warning>

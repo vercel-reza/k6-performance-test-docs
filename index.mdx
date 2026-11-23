@@ -1,0 +1,68 @@
+---
+title: "Pengenalan"
+description: "Framework HTTP lintas proyek: functional test Go/Godog, performance test k6, dan bukti eksekusi di PostgreSQL + Grafana."
+icon: "house"
+---
+
+Proyek ini adalah **framework pengujian HTTP** yang memisahkan tiga lapisan yang saling melengkapi. Restful-Booker dipakai sebagai contoh domain yang tetap didukung, tetapi engine profil JSON memungkinkan pengujian API/web lain tanpa menyalin kode.
+
+| Lapisan | Alat | Pertanyaan yang dijawab |
+| --- | --- | --- |
+| Functional correctness | Go + Godog (Gherkin) | Apakah kontrak API berperilaku benar? |
+| Performance | k6 | Berapa latency, check rate, dan HTTP failure rate? |
+| Evidence & reporting | Python → PostgreSQL → Grafana | Bagaimana tren antar run, dan step mana yang gagal? |
+
+<Note>
+Integrasi observability bersifat **aggregate sesudah run**, bukan live telemetry. k6 tidak memiliki output PostgreSQL bawaan yang dipakai proyek ini; grafik latency/checks adalah satu titik per run yang selesai.
+</Note>
+
+## Mulai dari mana
+
+<CardGroup cols={2}>
+  <Card title="Mulai cepat" icon="rocket" href="/mulai/mulai-cepat">
+    Jalankan verifikasi lokal, smoke k6, dan functional test dalam beberapa menit.
+  </Card>
+  <Card title="Arsitektur" icon="sitemap" href="/arsitektur">
+    Peta komponen, alur data, dan batas tanggung jawab Go, k6, dan publisher.
+  </Card>
+  <Card title="Profil universal" icon="sliders" href="/performance/profil-universal">
+    Uji web/API lain lewat profil JSON tanpa mengubah engine.
+  </Card>
+  <Card title="Dashboard Grafana" icon="chart-line" href="/observability/dashboard">
+    Struktur 25 panel, selector testcase, dan cara mengubahnya dengan aman.
+  </Card>
+</CardGroup>
+
+## Prinsip yang dipegang
+
+- **Bukti, bukan klaim.** Angka di dokumentasi berasal dari artefak run nyata; angka ilustratif selalu diberi label.
+- **Local ≠ integration.** Default test Go memakai `httptest` in-process. Hanya `RUN_API_TESTS=1` yang menghubungi API nyata, dan semua laporan menyimpan `execution_mode`.
+- **Load butuh izin.** `ALLOW_LOAD_TEST=true` adalah konfirmasi teknis, bukan pengganti persetujuan pemilik target.
+- **Secret tidak masuk artefak.** Report hanya aggregate; token, password, header Authorization, dan raw response tidak disimpan.
+- **Fail closed.** Input tidak lengkap atau tidak valid ditolak, bukan dianggap lulus.
+
+## Peta repositori
+
+```text
+.
+├── features/            # Skenario Gherkin (auth, booking)
+├── steps/               # Implementasi step Godog
+├── endpoints/           # HTTP client Booker + transport generik
+├── config/ models/      # Konfigurasi dan DTO
+├── api_test.go          # Runner Godog (mock lokal / integrasi opt-in)
+├── performance/         # Script k6, lib/ engine, profiles/
+├── scripts/             # Runner, publisher, validator, unit test
+├── observability/       # schema.sql + dashboard.json
+├── reports/             # Artefak eksekusi aktual
+├── postman/ gostman/    # Reproduksi manual
+├── Documentasi/         # Dokumen sumber (Markdown)
+└── docs/                # Situs dokumentasi ini (Mintlify)
+```
+
+## Status implementasi
+
+<Info>
+Implementasi sudah diverifikasi dengan unit test, `go vet`, race test, integrasi Go, dan smoke k6 terhadap API demo. Bukti aktual ada di `reports/RUN.md` serta report HTML/JSON di `reports/`.
+</Info>
+
+Yang **belum** dilakukan dan tidak boleh diklaim: load publik, migrasi/provisioning produksi, eksekusi Windows native, eksekusi UI Postman/Gostman, dan deployment situs dokumentasi ini.

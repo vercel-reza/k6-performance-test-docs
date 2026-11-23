@@ -1,0 +1,134 @@
+---
+title: "Arsitektur"
+description: "Peta komponen, alur data, dan batas tanggung jawab antara Go, k6, publisher, dan Grafana."
+icon: "sitemap"
+---
+
+## Tiga jalur independen
+
+Go dan k6 adalah dua runner yang **tidak saling memanggil**. k6 tidak memakai client Go,
+dan Go tidak menjalankan k6. Keduanya hanya berbagi kontrak domain dan pipeline report.
+
+```mermaid
+graph LR
+    A[features/*.feature] --> B[steps/api_steps.go]
+    B --> C[endpoints/client.go]
+    C --> D[(REST API)]
+
+    E[performance/*-test.js atau profile-test.js] --> F[performance/lib]
+    F --> D
+    E --> G[handleSummary]
+    G --> H[reports/*-summary.html]
+    G --> I[reports/*-summary.json]
+
+    I --> J[publish-report.py]
+    B --> K[functional-summary.json + meta]
+    K --> L[publish-functional.py]
+    J --> M[(PostgreSQL)]
+    L --> M
+    M --> N[Grafana dashboard]
+```
+
+| Komponen | Tanggung jawab | Bukan tanggung jawab |
+| --- | --- | --- |
+| Go + Godog | Kontrak request/response dan status | Latency, beban, kapasitas |
+| k6 | HTTP workload, checks, threshold, metrik | Validasi langkah BDD |
+| Python publisher | Validasi artefak, SQL, idempotensi | Menjalankan test |
+| PostgreSQL | Menyimpan aggregate + step evidence | Database aplikasi |
+| Grafana | Visualisasi dan drilldown | Menjalankan testcase |
+
+## Alur Go: mock lokal vs integrasi
+
+```mermaid
+graph TD
+  A[go test] --> B[TestAPI baca config]
+  B --> C{RUN_API_TESTS == 1?}
+  C -->|Tidak| D[httptest.NewServer]
+  D --> E[baseURL lokal]
+  C -->|Ya| F[BASE_URL env]
+  E --> G[NewClient]
+  F --> G
+  G --> H[Godog strict]
+  H --> I[status + validator kontrak]
+  I --> J[exit code]
+```
+
+- Default **bukan skip**: kedua feature tetap dijalankan lewat HTTP loopback.
+- Mock `/auth` hanya menerima POST JSON dengan kredensial lokal yang sesuai; selain itu 400.
+- Mock `GET /booking` mengembalikan `[{"bookingid":1}]`; rute/method lain 404.
+- Mode integrasi hanya mengganti target dan kredensial — feature, steps, client, dan validator sama.
+
+Detail: [Go + Godog](/functional/go-godog).
+
+## Alur k6
+
+```mermaid
+graph TD
+  A[Runner shell atau k6 langsung] --> B[init: import helper + options]
+  B --> C[validasi BASE_URL]
+  C --> D{mode load?}
+  D -->|Ya| E{ALLOW_LOAD_TEST true?}
+  E -->|Tidak| F[throw sebelum iterasi]
+  E -->|Ya| G[parse batas VU/durasi/sleep]
+  D -->|Tidak| H[smoke 1 VU 1 iterasi]
+  G --> I[default function per VU]
+  H --> I
+  I --> J[request + checks]
+  J --> K[evaluasi threshold]
+  K --> L[handleSummary]
+  L --> M[HTML + JSON + stdout]
+  K --> N[exit code]
+```
+
+Detail: [Performance k6](/performance/k6) dan [Laporan performance](/performance/laporan).
+
+## Jalur report dan evidence
+
+```mermaid
+graph TD
+  A[k6 summary JSON] --> B[publish-report.py]
+  C[Cucumber JSON + meta.json] --> D[publish-functional.py]
+  E[summary + samples.jsonl] --> F[publish-samples.py]
+  B --> G[(performance_runs)]
+  F --> G
+  F --> H[(performance_samples)]
+  D --> I[(functional_runs + functional_steps)]
+  G --> J[Grafana]
+  H --> J
+  I --> J
+```
+
+- **Aggregate setelah run**, bukan streaming.
+- ID deterministik: replay byte yang identik tidak menambah row.
+- `execution_mode` (`local`/`integration`) selalu ikut disimpan pada data functional.
+- p95 antar run tidak boleh dirata-ratakan untuk klaim p95 global.
+
+## Transport Go generik
+
+Selain adapter Booker, tersedia `endpoints.NewHTTPClient` / `Do` untuk API lain:
+
+- Menolak URL non-absolut, non-HTTP(S), userinfo, query, dan fragment.
+- Redirect dinonaktifkan (`http.ErrUseLastResponse`).
+- Timeout request 15 detik, body disimpan maksimal 1 MiB.
+- URL/path tidak aman ditolak; error transport disamarkan.
+- **Tidak** menerapkan allowlist origin milik engine k6 — pemanggil menentukan izin target.
+
+```go
+client, err := endpoints.NewHTTPClient("http://127.0.0.1:8080/api", nil)
+if err != nil {
+    return err
+}
+result, err := client.Do(context.Background(), endpoints.Request{
+    Method: http.MethodGet,
+    Path:   "/resource",
+    Query:  url.Values{"limit": {"1"}},
+    Headers: http.Header{"Accept": {"application/json"}},
+})
+```
+
+## Batas desain yang disengaja
+
+- Dua skenario BDD happy path, bukan seluruh CRUD/negative business contract.
+- Validator Go mengizinkan extra fields dan bukan JSON Schema lengkap.
+- Engine profil v1 bukan browser automation, bukan DSL Godog universal, bukan distributed load.
+- Penanda `secret` adalah label, **bukan** enkripsi atau sanitizer universal.
