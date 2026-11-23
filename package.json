@@ -5,9 +5,12 @@
   "description": "Situs dokumentasi Mintlify proyek k6-performance-test",
   "scripts": {
     "dev": "mint dev --host --no-open --port 2000",
-    "validate": "mint validate"
+    "build": "node scripts/build.mjs",
+    "validate": "mint validate",
+    "preview": "npm run build && node scripts/preview.mjs"
   },
   "devDependencies": {
-    "mint": "4.2.1184"
+    "mint": "4.2.1184",
+    "adm-zip": "^0.5.16"
   }
 }
