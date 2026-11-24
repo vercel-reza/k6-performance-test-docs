@@ -7,7 +7,9 @@
     "dev": "mint dev --host --no-open --port 2000",
     "build": "node scripts/build.mjs",
     "validate": "mint validate",
-    "preview": "npm run build && node scripts/preview.mjs"
+    "preview": "npm run build && node scripts/preview.mjs",
+    "gate:set": "node scripts/auth-gate.mjs set",
+    "gate:hash": "node scripts/auth-gate.mjs hash"
   },
   "devDependencies": {
     "mint": "4.2.1184",

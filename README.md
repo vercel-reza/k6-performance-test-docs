@@ -18,12 +18,54 @@ npm run preview    # build + server lokal yang meniru static hosting Vercel
 ```
 
 `npm run build` menjalankan `mint export`, mengekstrak zip ke `public/`, membuang
-artefak khusus hosting manual (`serve.js`, `README.md`, `Start Docs.*`), dan
-memverifikasi `public/index.html` ada. `public/` dan `export.zip` tidak di-commit.
+artefak khusus hosting manual (`serve.js`, `README.md`, `Start Docs.*`), menyuntik
+gate password (lihat bawah), dan memverifikasi `public/index.html` ada. `public/`
+dan `export.zip` tidak di-commit.
 
 > Penting: `public/` dihapus **sebelum** export. Kalau tidak, mint ikut men-zip
 > hasil build sebelumnya dan muncul `public/public/...`. `scripts/build.mjs`
 > sudah menangani ini dan gagal keras bila duplikat terdeteksi.
+
+## Password gate halaman
+
+Situs terkunci password sebelum konten bisa dibaca. Gate disuntik saat build:
+setiap `*.html` di `public/` mendapat `<script data-k6-gate>` di `<head>` dan
+`public/_gate/auth.js` (sumber: `scripts/auth-client.js`) menampilkan overlay
+password. Password benar → token disimpan di `localStorage` selama `ttlHours`
+(default 12 jam), halaman dimuat ulang, dan gate tidak muncul lagi.
+
+Konfigurasi dibaca berurutan:
+
+1. `DOCS_PASSWORD` (env) — di-hash sha256 saat build, password mentah tidak pernah masuk output.
+2. `DOCS_PASSWORD_SHA256` (env) — hash siap pakai.
+3. `docs-gate.json` — default repo, isinya `{ "sha256": "<hex>", "ttlHours": 12 }`.
+
+Ganti password:
+
+```bash
+DOCS_PASSWORD='password-baru' npm run gate:set   # tulis ulang docs-gate.json
+npm run build                                    # wajib: hash ditanam saat build
+```
+
+Cek hash tanpa menulis file: `DOCS_PASSWORD='...' npm run gate:hash`.
+TTL sesi: `DOCS_PASSWORD_TTL_HOURS=8 npm run build`.
+
+Di Vercel tidak perlu setup tambahan karena `docs-gate.json` ikut ter-commit;
+set `DOCS_PASSWORD` di Project → Settings → Environment Variables bila ingin
+menimpa password saat deploy (butuh redeploy agar berlaku).
+
+### Batasan (penting)
+
+Gate ini **sisi klien**: isi halaman sudah terkirim ke browser, jadi tetap bisa
+dibaca lewat `curl`, view-source, atau JavaScript dimatikan. Selain itu
+`/llms.txt`, `/llms-full.txt`, `/_mintlify/search-index.json`, dan halaman
+markdown (`*.md`) tidak ikut terlindungi. Untuk proteksi sungguhan pakai salah
+satu:
+
+- **Vercel Deployment Protection → Password Protection** (fitur berbayar, tanpa kode), atau
+- edge middleware yang menolak request sebelum file statis disajikan.
+
+`npm run dev` (`mint dev`) tidak memakai gate — gate hanya ada di hasil `mint export`.
 
 ## Deploy ke Vercel
 

@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import AdmZip from 'adm-zip';
+import { injectGate, readGateConfig } from './auth-gate.mjs';
 
 const root = process.cwd();
 const outDir = path.join(root, 'public');
@@ -56,6 +57,17 @@ if (!fs.existsSync(path.join(outDir, 'index.html'))) {
 }
 if (fs.existsSync(path.join(outDir, 'public'))) {
   throw new Error('public/public terdeteksi — export membawa direktori kerja, bersihkan lalu build ulang');
+}
+
+// Gate password opsional: aktif bila DOCS_PASSWORD / DOCS_PASSWORD_SHA256 diset.
+const gate = readGateConfig();
+if (gate) {
+  const { pages: gated, already } = injectGate(outDir, gate, console.log);
+  const ttl = `${gate.ttlHours} jam`;
+  console.log(`[gate] aktif (${gate.source}): ${gated} halaman disuntik, ttl sesi ${ttl}`);
+  if (already) console.log(`[gate] ${already} halaman sudah bergate`);
+} else {
+  console.log('[gate] mati — isi docs-gate.json atau set DOCS_PASSWORD');
 }
 
 function countPages(dir) {
